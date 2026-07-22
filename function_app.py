@@ -4,8 +4,8 @@ import asyncio
 import json
 import os
 
-from scraper.ats import fetch_all
-from scraper.fetcher import fetch_job_details
+from scraper.ats import fetch_all as fetch_ats
+from scraper.firecrawl import scrape_all as fetch_firecrawl
 from scraper.enrichment import batch_enrich
 from storage.cache import filter_new, mark_seen
 from storage.writer import save_jobs
@@ -35,21 +35,22 @@ async def _run():
     logging.info("Job scrape started")
     companies = load_companies()
 
-    ats_companies = [c for c in companies if c["ats"] != "custom"]
-    custom_companies = [c for c in companies if c["ats"] == "custom"]
+    ats_companies       = [c for c in companies if c["ats"] in ("greenhouse", "lever", "smartrecruiters")]
+    firecrawl_companies = [c for c in companies if c["ats"] == "firecrawl"]
 
-    # Fetch from ATS APIs (free, structured JSON)
-    ats_jobs = await fetch_all(ats_companies)
+    # ATS APIs — free structured JSON
+    ats_jobs = await fetch_ats(ats_companies)
     logging.info(f"ATS APIs: {len(ats_jobs)} jobs")
 
-    # Fetch from custom career pages (HTML scrape)
-    custom_urls = [c["url"] for c in custom_companies]
-    custom_jobs = await fetch_job_details(custom_urls)
-    logging.info(f"Custom pages: {len(custom_jobs)} jobs")
+    # Firecrawl — handles any JS-rendered or custom career page
+    firecrawl_jobs = await fetch_firecrawl(firecrawl_companies)
+    logging.info(f"Firecrawl: {len(firecrawl_jobs)} jobs")
 
-    all_jobs = ats_jobs + custom_jobs
+    all_jobs = ats_jobs + firecrawl_jobs
+    if not all_jobs:
+        logging.info("No jobs fetched — exiting")
+        return
 
-    # Skip jobs already in cache
     new_jobs = [j for j in all_jobs if j["url"] in filter_new([j["url"] for j in all_jobs])]
     logging.info(f"{len(new_jobs)} new jobs after dedup")
 
