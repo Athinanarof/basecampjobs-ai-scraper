@@ -229,5 +229,19 @@ Push to `main` — GitHub Actions deploys automatically.
 | Azure Functions | ~$0 (free tier) |
 | Azure Table Storage | ~$0 at this scale |
 | Azure OpenAI GPT-4o-mini | ~$0.10–0.50 per month |
-| Firecrawl | Free (1,000 pages/month) → $16/month if over |
+| Firecrawl | Free (1,000 credits/month) → $16/month if over |
 | **Total** | **~$0–$17/month** |
+
+**Firecrawl credit breakdown — 1 credit = 1 page scraped (no multipliers).**
+
+Each Firecrawl company uses:
+- 1 credit to map the career page and discover job URLs
+- 1 credit per individual job page scraped
+
+| Company | Est. active jobs | Credits/month |
+|---|---|---|
+| REI | ~200 | ~201 |
+| Backcountry | ~50 | ~51 |
+| **Total (current list)** | | **~252 credits** |
+
+The free tier (1,000 credits/month) comfortably covers the current company list with room for ~3 more REI-sized companies. All companies on Greenhouse, Lever, and SmartRecruiters use their free public APIs and cost **zero Firecrawl credits** regardless of job volume.
