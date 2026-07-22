@@ -228,9 +228,9 @@ Push to `main` — GitHub Actions deploys automatically.
 |---|---|
 | Azure Functions | ~$0 (free tier) |
 | Azure Table Storage | ~$0 at this scale |
-| Azure OpenAI GPT-4o-mini | ~$0.10–0.50 per month |
+| Azure OpenAI GPT-5-mini | ~$0.25 per month |
 | Firecrawl | Free (1,000 credits/month) → $16/month if over |
-| **Total** | **~$0–$17/month** |
+| **Total** | **~$0.25–$17/month** |
 
 **Firecrawl credit breakdown — 1 credit = 1 page scraped (no multipliers).**
 
