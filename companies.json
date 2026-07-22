@@ -1,0 +1,12 @@
+[
+  {"name": "Specialized",        "ats": "smartrecruiters", "slug": "SpecializedBicycle"},
+  {"name": "Patagonia",          "ats": "greenhouse",      "slug": "patagonia"},
+  {"name": "YETI",               "ats": "greenhouse",      "slug": "yeticoolers"},
+  {"name": "Black Diamond",      "ats": "lever",           "slug": "blackdiamond"},
+  {"name": "Osprey Packs",       "ats": "lever",           "slug": "ospreypacks"},
+  {"name": "Hydro Flask",        "ats": "greenhouse",      "slug": "hydroflask"},
+  {"name": "Norrona",            "ats": "greenhouse",      "slug": "norrona"},
+  {"name": "Salomon",            "ats": "smartrecruiters", "slug": "Salomon"},
+  {"name": "REI",                "ats": "custom",          "url": "https://rei.jobs/search/?q=&l="},
+  {"name": "Backcountry",        "ats": "custom",          "url": "https://www.backcountry.com/careers"}
+]
