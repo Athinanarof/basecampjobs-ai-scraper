@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import asyncio
 from typing import List, Dict, Optional
@@ -9,6 +10,33 @@ JOB_URL_PATTERNS = ["/jobs/", "/job/", "/position/", "/opening/", "/posting/", "
 
 # Patterns to exclude (search pages, apply flows, etc.)
 EXCLUDE_PATTERNS = ["/apply", "/search", "/category", "/location", "/department", "/filter", "?"]
+
+# iCIMS and generic ATS boilerplate that Firecrawl picks up as text
+_JUNK_LINES = {
+    "job_description.share.html",
+    "carousel_paragraph",
+    "skip to main content",
+    "back",
+    "mail_outline",
+    "loginorregister",
+    "login",
+    "register",
+    "okay",
+    "get future jobs matching this search",
+}
+
+
+def _clean_markdown(text: str) -> str:
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        lower = stripped.replace("\\", "").lower()  # un-escape markdown before comparing
+        if lower in _JUNK_LINES:
+            continue
+        if lower.startswith("cookies are used on this site"):
+            continue
+        lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 _client: Optional[FirecrawlApp] = None
 
@@ -60,7 +88,8 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
     for url in job_urls[:5]:
         try:
             result = client.scrape_url(url, formats=["markdown"])
-            markdown = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
+            raw_md = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
+            markdown = _clean_markdown(raw_md)
             metadata = result.metadata if hasattr(result, "metadata") else result.get("metadata", {})
 
             if not markdown:
