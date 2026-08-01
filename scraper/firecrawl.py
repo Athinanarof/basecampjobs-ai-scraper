@@ -39,8 +39,9 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
 
     # Step 1: Map the career page to discover all job URLs
     try:
-        map_result = client.map_url(career_url, params={"search": "job opening position"})
-        all_links = map_result.get("links", [])
+        map_result = client.map_url(career_url, search="job opening position")
+        raw_links = map_result.links if hasattr(map_result, "links") else (map_result if isinstance(map_result, list) else [])
+        all_links = [l.url if hasattr(l, "url") else str(l) for l in raw_links]
     except Exception as e:
         logging.error(f"{name}: map failed — {e}")
         return []
@@ -53,12 +54,14 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
         return []
 
     # Step 2: Scrape each job page (cap at 50 per company per run)
+    # Free plan: 10 req/min — sleep 7s between requests to stay under limit
+    import time
     jobs = []
-    for url in job_urls[:50]:
+    for url in job_urls[:5]:
         try:
             result = client.scrape_url(url, formats=["markdown"])
-            markdown = result.get("markdown", "")
-            metadata = result.get("metadata", {})
+            markdown = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
+            metadata = result.metadata if hasattr(result, "metadata") else result.get("metadata", {})
 
             if not markdown:
                 logging.warning(f"{name}: empty markdown for {url[:60]}")
@@ -66,13 +69,14 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
 
             jobs.append({
                 "url": url,
-                "raw_title": metadata.get("title", ""),
+                "raw_title": getattr(metadata, "title", None) or (metadata.get("title", "") if isinstance(metadata, dict) else ""),
                 "raw_company": name,
                 "raw_location": None,
                 "raw_description": markdown[:5000],
             })
         except Exception as e:
             logging.warning(f"{name}: scrape failed [{url[:60]}] — {e}")
+        time.sleep(7)
 
     logging.info(f"{name}: {len(jobs)} jobs scraped")
     return jobs

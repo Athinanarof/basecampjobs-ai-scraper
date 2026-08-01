@@ -2,18 +2,18 @@ import json
 import os
 import logging
 from typing import List, Dict
-from openai import AzureOpenAI
+from openai import OpenAI
 
-_client: AzureOpenAI | None = None
+_client: OpenAI | None = None
 
 
-def _get_client() -> AzureOpenAI:
+def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = AzureOpenAI(
+        endpoint = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
+        _client = OpenAI(
             api_key=os.environ["AZURE_OPENAI_API_KEY"],
-            azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-            api_version="2024-08-01-preview",
+            base_url=f"{endpoint}/openai/v1/",
         )
     return _client
 
@@ -71,8 +71,7 @@ def _enrich_batch(batch: List[Dict]) -> List[Dict]:
                 },
             ],
             response_format={"type": "json_object"},
-            temperature=0,
-            max_tokens=4096,
+            max_completion_tokens=4096,
         )
         data = json.loads(response.choices[0].message.content)
         results = data.get("jobs", [])

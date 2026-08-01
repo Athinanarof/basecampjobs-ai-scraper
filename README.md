@@ -33,7 +33,7 @@ Before you start, make sure you have the following installed and ready.
 | Service | What it's for | Get it at |
 |---|---|---|
 | [Firecrawl](https://firecrawl.dev) | Scrapes career pages that require JavaScript | firecrawl.dev → Sign up → API Keys |
-| [Azure OpenAI](https://portal.azure.com) | Enriches raw job text into structured fields | Azure Portal → Create Azure OpenAI resource |
+| [Azure AI Foundry](https://ai.azure.com) | Enriches raw job text into structured fields | Azure Portal → Create Azure OpenAI resource → then deploy model in Azure AI Foundry |
 | [Azure Storage](https://portal.azure.com) | Stores jobs and dedup cache (local: Azurite handles this) | Same Azure resource group |
 
 ---
@@ -99,7 +99,8 @@ cp local.settings.json.example local.settings.json
 **Where to find each key:**
 
 - `FIRECRAWL_API_KEY` → [firecrawl.dev](https://firecrawl.dev) → Dashboard → API Keys
-- `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT` → Azure Portal → your OpenAI resource → Keys and Endpoint
+- `AZURE_OPENAI_API_KEY` → [Azure AI Foundry](https://ai.azure.com) → Deployments → `gpt-5-mini-deploy` → copy **API Key**
+- `AZURE_OPENAI_ENDPOINT` → [Azure AI Foundry](https://ai.azure.com) → Deployments → `gpt-5-mini-deploy` → copy **Project endpoint**
 - `AZURE_STORAGE_CONNECTION_STRING` → leave as-is for local development (Azurite handles it)
 
 ---

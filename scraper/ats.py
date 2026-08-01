@@ -30,7 +30,7 @@ async def _greenhouse(client: httpx.AsyncClient, company: Dict) -> List[Dict]:
     slug = company["slug"]
     resp = await client.get(
         f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs",
-        params={"content": "false"},
+        params={"content": "true"},
     )
     resp.raise_for_status()
     return [
@@ -39,7 +39,7 @@ async def _greenhouse(client: httpx.AsyncClient, company: Dict) -> List[Dict]:
             "raw_title": j["title"],
             "raw_company": company["name"],
             "raw_location": j.get("location", {}).get("name"),
-            "raw_description": "",  # content=false keeps payload small; enrichment uses title+location
+            "raw_description": j.get("content", "")[:2000],
         }
         for j in resp.json().get("jobs", [])
     ]

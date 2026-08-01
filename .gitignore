@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local scraper outputs
+local.settings.json
+jobs_output.json
+debug/

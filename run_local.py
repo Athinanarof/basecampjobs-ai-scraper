@@ -14,6 +14,14 @@ import json
 import os
 import sys
 
+# ── Local test limits — change these to control pipeline scale ──────────────
+# Set any value to None to remove that cap.
+DEBUG_LIMITS = {
+    "ats": 5,       # max jobs kept from ATS APIs
+    "firecrawl": 5, # max jobs kept from Firecrawl (also capped inside firecrawl.py)
+    "enrich": 10,   # max jobs sent to enrichment in the full pipeline
+}
+
 
 def load_settings():
     path = os.path.join(os.path.dirname(__file__), "local.settings.json")
@@ -38,8 +46,50 @@ load_settings()
 from scraper.ats import fetch_all as fetch_ats
 from scraper.firecrawl import scrape_all as fetch_firecrawl
 from scraper.enrichment import batch_enrich
-from storage.cache import filter_new, mark_seen
-from storage.writer import save_jobs
+
+OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "jobs_output.json")
+DEBUG_DIR = os.path.join(os.path.dirname(__file__), "debug")
+
+
+def save_debug(step: str, jobs: list):
+    """Write per-step snapshot to debug/<step>.json for easy inspection."""
+    os.makedirs(DEBUG_DIR, exist_ok=True)
+    path = os.path.join(DEBUG_DIR, f"{step}.json")
+    with open(path, "w") as f:
+        json.dump(jobs, f, indent=2)
+    print(f"  [debug] wrote {len(jobs)} records → debug/{step}.json")
+
+
+def _cap(jobs: list, limit_key: str) -> list:
+    limit = DEBUG_LIMITS.get(limit_key)
+    if limit is not None and len(jobs) > limit:
+        print(f"  [debug] capping {len(jobs)} → {limit} (DEBUG_LIMITS['{limit_key}'])")
+        return jobs[:limit]
+    return jobs
+
+
+def save_local(jobs):
+    """Upsert jobs by URL — updates existing records instead of skipping them."""
+    existing = []
+    if os.path.exists(OUTPUT_FILE):
+        with open(OUTPUT_FILE) as f:
+            existing = json.load(f)
+
+    by_url = {j["url"]: j for j in existing}
+    added, updated = 0, 0
+    for job in jobs:
+        url = job.get("url")
+        if url in by_url:
+            by_url[url] = job
+            updated += 1
+        else:
+            by_url[url] = job
+            added += 1
+
+    with open(OUTPUT_FILE, "w") as f:
+        json.dump(list(by_url.values()), f, indent=2)
+    print(f"  Saved: {added} new, {updated} updated → jobs_output.json ({len(by_url)} total)")
+    return list(by_url.values())
 
 SAMPLE_JOBS = [
     {
@@ -66,6 +116,16 @@ SAMPLE_JOBS = [
 ]
 
 
+def _print_job_sample(jobs: list, n: int = 5):
+    for j in jobs[:n]:
+        desc_len = len(j.get("raw_description") or "")
+        enriched_fields = [k for k in ("title", "field", "niche", "skills") if k in j]
+        tag = f" [enriched: {', '.join(enriched_fields)}]" if enriched_fields else ""
+        print(f"  [{j.get('raw_company', '?'):20s}] {str(j.get('raw_title', ''))[:45]}  desc={desc_len}ch{tag}")
+    if len(jobs) > n:
+        print(f"  ... and {len(jobs) - n} more")
+
+
 async def run_ats():
     companies = load_companies()
     ats_companies = [c for c in companies if c["ats"] in ("greenhouse", "lever", "smartrecruiters")]
@@ -76,12 +136,11 @@ async def run_ats():
 
     print("\nFetching...")
     jobs = await fetch_ats(ats_companies)
+    jobs = _cap(jobs, "ats")
 
     print(f"\nTotal: {len(jobs)} jobs")
-    for j in jobs[:10]:
-        print(f"  [{j['raw_company']:20s}] {j['raw_title'][:50]}")
-    if len(jobs) > 10:
-        print(f"  ... and {len(jobs) - 10} more")
+    _print_job_sample(jobs)
+    save_debug("step_1_ats", jobs)
     return jobs
 
 
@@ -95,12 +154,11 @@ async def run_firecrawl():
 
     print("\nScraping... (this may take a minute)")
     jobs = await fetch_firecrawl(fc_companies)
+    jobs = _cap(jobs, "firecrawl")
 
     print(f"\nTotal: {len(jobs)} jobs")
-    for j in jobs[:10]:
-        print(f"  [{j['raw_company']:20s}] {j['raw_title'][:50]}")
-    if len(jobs) > 10:
-        print(f"  ... and {len(jobs) - 10} more")
+    _print_job_sample(jobs)
+    save_debug("step_2_firecrawl", jobs)
     return jobs
 
 
@@ -109,10 +167,15 @@ async def run_enrich(jobs=None):
     jobs = jobs or SAMPLE_JOBS
     print(f"Enriching {len(jobs)} jobs with Azure OpenAI...")
     enriched = await batch_enrich(jobs, batch_size=20)
+
+    with_field = sum(1 for j in enriched if j.get("field"))
+    with_skills = sum(1 for j in enriched if j.get("skills"))
+    outdoor = sum(1 for j in enriched if j.get("is_outdoor_industry"))
+    print(f"\nResults: {len(enriched)} enriched | field={with_field} | skills={with_skills} | outdoor={outdoor}")
     for j in enriched:
-        print(f"  {j.get('title', 'n/a'):40s} | {j.get('field', '?')} / {j.get('niche', '?')}")
-        print(f"  {'outdoor:':8s} {j.get('is_outdoor_industry', '?')}")
-        print()
+        print(f"  {str(j.get('title', 'n/a'))[:40]:40s} | {j.get('field', '?')} / {j.get('niche', '?')}  outdoor={j.get('is_outdoor_industry', '?')}")
+
+    save_debug("step_3_enriched", enriched)
     return enriched
 
 
@@ -122,27 +185,29 @@ async def run_all():
     fc_companies  = [c for c in companies if c["ats"] == "firecrawl"]
 
     print("\n=== FULL PIPELINE ===")
+    print(f"DEBUG_LIMITS: {DEBUG_LIMITS}\n")
 
     ats_jobs = await fetch_ats(ats_companies)
+    ats_jobs = _cap(ats_jobs, "ats")
     print(f"[1/4] ATS APIs:    {len(ats_jobs)} jobs")
+    save_debug("step_1_ats", ats_jobs)
 
     fc_jobs = await fetch_firecrawl(fc_companies)
-    print(f"[1/4] Firecrawl:   {len(fc_jobs)} jobs")
+    fc_jobs = _cap(fc_jobs, "firecrawl")
+    print(f"[2/4] Firecrawl:   {len(fc_jobs)} jobs")
+    save_debug("step_2_firecrawl", fc_jobs)
 
     all_jobs = ats_jobs + fc_jobs
-    new_jobs = [j for j in all_jobs if j["url"] in filter_new([j["url"] for j in all_jobs])]
-    print(f"[2/4] New after dedup: {len(new_jobs)}")
+    to_enrich = _cap(all_jobs, "enrich")
+    print(f"[3/4] Total before enrich: {len(all_jobs)} → sending {len(to_enrich)} to AI")
 
-    if not new_jobs:
-        print("Nothing new — delete JobUrlCache table in Azurite to reset.")
-        return
+    enriched = await batch_enrich(to_enrich, batch_size=20)
+    with_field = sum(1 for j in enriched if j.get("field"))
+    print(f"[3/4] Enriched: {len(enriched)} jobs ({with_field} with field)")
+    save_debug("step_3_enriched", enriched)
 
-    enriched = await batch_enrich(new_jobs[:10], batch_size=20)
-    print(f"[3/4] Enriched: {len(enriched)} jobs")
-
-    save_jobs(enriched)
-    mark_seen([j["url"] for j in enriched])
-    print(f"[4/4] Saved. Done.")
+    save_local(enriched)
+    print(f"[4/4] Done.")
 
 
 if __name__ == "__main__":
