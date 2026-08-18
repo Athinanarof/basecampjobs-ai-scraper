@@ -1,9 +1,11 @@
 import os
 import re
+import json
 import logging
 import asyncio
 from typing import List, Dict, Optional
 from firecrawl import FirecrawlApp
+from selectolax.parser import HTMLParser
 
 # URL patterns that indicate a job detail page
 JOB_URL_PATTERNS = ["/jobs/", "/job/", "/position/", "/opening/", "/posting/", "/careers/detail"]
@@ -37,6 +39,37 @@ def _clean_markdown(text: str) -> str:
             continue
         lines.append(line)
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+def _extract_jobposting_jsonld(html: str) -> Dict:
+    """Pull the schema.org JobPosting block out of a job page's <script type="application/ld+json">, if present."""
+    if not html:
+        return {}
+    try:
+        tree = HTMLParser(html)
+        for node in tree.css('script[type="application/ld+json"]'):
+            try:
+                data = json.loads(node.text())
+            except (json.JSONDecodeError, TypeError):
+                continue
+            candidates = data if isinstance(data, list) else [data]
+            for candidate in candidates:
+                if isinstance(candidate, dict) and candidate.get("@type") == "JobPosting":
+                    return candidate
+    except Exception as e:
+        logging.warning(f"JobPosting JSON-LD parse failed: {e}")
+    return {}
+
+
+def _location_from_jsonld(jobposting: Dict) -> Optional[str]:
+    address = (jobposting.get("jobLocation") or {}).get("address") or {}
+    if not isinstance(address, dict):
+        return None
+    city = address.get("addressLocality")
+    region = address.get("addressRegion")
+    if city and region:
+        return f"{city}, {region}"
+    return city or region
+
 
 _client: Optional[FirecrawlApp] = None
 
@@ -87,21 +120,29 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
     jobs = []
     for url in job_urls[:5]:
         try:
-            result = client.scrape_url(url, formats=["markdown"])
+            result = client.scrape_url(url, formats=["markdown", "rawHtml"])
             raw_md = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
             markdown = _clean_markdown(raw_md)
             metadata = result.metadata if hasattr(result, "metadata") else result.get("metadata", {})
+            # rawHtml (not "html") — Firecrawl's "html" format is cleaned/sanitized and strips
+            # <script> tags, which drops the JobPosting JSON-LD block we need below.
+            # SDK attribute is snake_case (raw_html) even though the API request format is "rawHtml".
+            html = getattr(result, "raw_html", None) or (result.get("rawHtml", "") if isinstance(result, dict) else "")
 
             if not markdown:
                 logging.warning(f"{name}: empty markdown for {url[:60]}")
                 continue
 
+            jobposting = _extract_jobposting_jsonld(html)
+
             jobs.append({
                 "url": url,
                 "raw_title": getattr(metadata, "title", None) or (metadata.get("title", "") if isinstance(metadata, dict) else ""),
                 "raw_company": name,
-                "raw_location": None,
+                "raw_location": _location_from_jsonld(jobposting),
                 "raw_description": markdown[:5000],
+                "raw_employment_type": jobposting.get("employmentType"),
+                "raw_valid_through": jobposting.get("validThrough"),
             })
         except Exception as e:
             logging.warning(f"{name}: scrape failed [{url[:60]}] — {e}")
