@@ -14,6 +14,9 @@ import json
 import os
 import sys
 
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+
 # ── Local test limits — change these to control pipeline scale ──────────────
 # Set any value to None to remove that cap.
 DEBUG_LIMITS = {
@@ -46,18 +49,25 @@ load_settings()
 from scraper.ats import fetch_all as fetch_ats
 from scraper.firecrawl import scrape_all as fetch_firecrawl
 from scraper.enrichment import batch_enrich
+from scraper.payload import build_payload
 
 OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "jobs_output.json")
 DEBUG_DIR = os.path.join(os.path.dirname(__file__), "debug")
 
 
-def save_debug(step: str, jobs: list):
-    """Write per-step snapshot to debug/<step>.json for easy inspection."""
+def save_debug(step: str, jobs: list, as_payload: bool = False):
+    """Write per-step snapshot to debug/<step>.json for easy inspection.
+
+    as_payload=True reshapes each job into the create-external-jobrequest
+    payload shape (see scraper/payload.py) instead of writing raw fields —
+    only meaningful once enrichment has run.
+    """
     os.makedirs(DEBUG_DIR, exist_ok=True)
     path = os.path.join(DEBUG_DIR, f"{step}.json")
+    out = [build_payload(j) for j in jobs] if as_payload else jobs
     with open(path, "w") as f:
-        json.dump(jobs, f, indent=2)
-    print(f"  [debug] wrote {len(jobs)} records → debug/{step}.json")
+        json.dump(out, f, indent=2)
+    print(f"  [debug] wrote {len(out)} records → debug/{step}.json")
 
 
 def _cap(jobs: list, limit_key: str) -> list:
@@ -69,21 +79,33 @@ def _cap(jobs: list, limit_key: str) -> list:
 
 
 def save_local(jobs):
-    """Upsert jobs by URL — updates existing records instead of skipping them."""
+    """Upsert payload-shaped jobs by URL — updates existing records instead of skipping them.
+
+    Writes the create-external-jobrequest payload shape (scraper/payload.py),
+    keyed on howToApply.urlOrEmail since the payload itself has no top-level
+    url field.
+    """
     existing = []
     if os.path.exists(OUTPUT_FILE):
         with open(OUTPUT_FILE) as f:
             existing = json.load(f)
 
-    by_url = {j["url"]: j for j in existing}
+    payloads = [build_payload(job) for job in jobs]
+
+    valid_existing = [j for j in existing if "howToApply" in j]
+    dropped = len(existing) - len(valid_existing)
+    if dropped:
+        print(f"  [warn] dropped {dropped} old-format record(s) from jobs_output.json (pre-dates payload shape)")
+
+    by_url = {j["howToApply"]["urlOrEmail"]: j for j in valid_existing}
     added, updated = 0, 0
-    for job in jobs:
-        url = job.get("url")
+    for payload in payloads:
+        url = payload["howToApply"]["urlOrEmail"]
         if url in by_url:
-            by_url[url] = job
+            by_url[url] = payload
             updated += 1
         else:
-            by_url[url] = job
+            by_url[url] = payload
             added += 1
 
     with open(OUTPUT_FILE, "w") as f:
@@ -176,6 +198,7 @@ async def run_enrich(jobs=None):
         print(f"  {str(j.get('title', 'n/a'))[:40]:40s} | {j.get('field', '?')} / {j.get('niche', '?')}  outdoor={j.get('is_outdoor_industry', '?')}")
 
     save_debug("step_3_enriched", enriched)
+    save_debug("step_4_payload", enriched, as_payload=True)
     return enriched
 
 
@@ -205,6 +228,7 @@ async def run_all():
     with_field = sum(1 for j in enriched if j.get("field"))
     print(f"[3/4] Enriched: {len(enriched)} jobs ({with_field} with field)")
     save_debug("step_3_enriched", enriched)
+    save_debug("step_4_payload", enriched, as_payload=True)
 
     save_local(enriched)
     print(f"[4/4] Done.")
