@@ -198,6 +198,8 @@ basecampjobs-ai-scraper/
         └── deploy.yml       # GitHub Actions → deploys to Azure on push to main
 ```
 
+> **Why `storage/cache.py` uses its own Table Storage instead of Basecamp's main database:** this dedup cache is a narrow, high-frequency, scraper-only concern (once per scraped URL per run) with no relevance to the rest of the platform. Keeping it here avoids adding a table/endpoint to `basecampjobs-core` (no coordination, no new auth surface) and stays fast — direct storage access instead of extra HTTP round-trips per URL. Cost stays effectively $0 either way.
+
 ---
 
 ## Deploying to Azure
