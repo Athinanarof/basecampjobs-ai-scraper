@@ -26,15 +26,26 @@ Each entry must have:
   title         (string)
   company       (string)
   location      (string or null)
-  employment_type ("full-time" | "part-time" | "contract" | "internship" | null)
+  introduction  (string or null — a fresh 1-2 sentence plain-text summary of the role, written by you, not copied verbatim from the posting)
+  employment_type ("full-time" | "part-time" | "freelance" | "seasonal-full-time" | "seasonal-part-time" | "internship" | "other" | null — pick the closest match; "freelance" covers contract/1099 work)
+  remote_status ("onsite" | "hybrid" | "remote-in-region" | "remote-anywhere" | "on-the-road" | null — default to "onsite" if a physical work location is given and nothing suggests otherwise; "on-the-road" means travel is a core part of the job, e.g. field reps, regional roles requiring regular travel)
   field         (e.g. "Cycling", "Outdoor Retail", "Ski/Snow", "Paddle Sports", "Climbing", "Trail Running", "Hunting/Fishing")
   niche         (specific area within field, e.g. "Mountain Bike", "Backcountry Ski", "SUP")
   skills        (array of strings, max 8)
-  salary_range  (string or null)
+  salary_range  (string or null — the salary text as written, e.g. "$95k-$115k" or "$17.84/hr")
+  salary_min    (number or null — lower bound parsed from salary_range, same unit as written, no conversion)
+  salary_max    (number or null — upper bound parsed from salary_range, same unit as written, no conversion)
   is_outdoor_industry (boolean — false if clearly unrelated)
+  is_remote_considered   (boolean — true only if posting says remote/hybrid/work-from-home is an option)
+  is_management_required (boolean — true only if the role requires managing/supervising other employees)
+  is_housing_included    (boolean — true only if posting explicitly states housing is provided)
+  is_housing_subsidized  (boolean — true only if posting explicitly states housing is subsidized/discounted)
+  is_relocation_stipend  (boolean — true only if posting explicitly mentions relocation assistance/stipend)
+  is_commuter_benefits   (boolean — true only if posting explicitly mentions commuter benefits/transit assistance)
 
 Use the Basecamp outdoor industry taxonomy for field and niche.
 If a field cannot be determined, use "General Outdoor".
+For every boolean field except is_outdoor_industry, default to false if the posting doesn't explicitly say so — never guess.
 """.strip()
 
 
