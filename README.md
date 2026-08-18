@@ -13,7 +13,7 @@ Daily timer (6am UTC)
          ↓
     Deduplication (skip already-seen job URLs)
          ↓
-    Azure OpenAI GPT-4o-mini → enriches each job with field, niche, skills, etc.
+    Azure OpenAI GPT-5o-mini → enriches each job with field, niche, skills, etc.
          ↓
     Azure Table Storage → saves results
 ```
