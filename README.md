@@ -138,6 +138,8 @@ python run_local.py --step enrich
 ```
 Runs Azure OpenAI enrichment on sample job data. Confirms AI keys are working and the output format is correct. Uses a small number of tokens.
 
+> Only the first 800 characters of each job's raw description are sent to the AI (`scraper/enrichment.py`), to keep token usage down. If a posting's relevant details sit further down the page than that, they won't reach the model.
+
 ---
 
 **Full pipeline**
