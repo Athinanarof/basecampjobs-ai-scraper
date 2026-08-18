@@ -8,5 +8,5 @@
   {"name": "Hydro Flask",     "ats": "greenhouse",      "slug": "hydroflask"},
   {"name": "Norrona",         "ats": "greenhouse",      "slug": "norrona"},
   {"name": "REI",             "ats": "firecrawl",       "url": "https://rei.jobs/jobs"},
-  {"name": "Backcountry",     "ats": "firecrawl",       "url": "https://www.backcountry.com/careers"}
+  {"name": "Backcountry",     "ats": "firecrawl",       "url": "https://jobs.lever.co/cscgeneration-2"}
 ]
