@@ -89,7 +89,10 @@ cp local.settings.json.example local.settings.json
     "FIRECRAWL_API_KEY": "fc-xxxxxxxxxxxxxxxx",
     "AZURE_OPENAI_API_KEY": "your-azure-openai-key",
     "AZURE_OPENAI_ENDPOINT": "https://your-resource.openai.azure.com/",
-    "AZURE_OPENAI_DEPLOYMENT": "gpt-4o-mini"
+    "AZURE_OPENAI_DEPLOYMENT": "gpt-4o-mini",
+    "BASECAMP_API_BASE_URL": "https://basecamp-develop.azurewebsites.net/api",
+    "BASECAMP_USERNAME": "your-scrapping-role-username",
+    "BASECAMP_PASSWORD": "your-scrapping-role-password"
   }
 }
 ```
@@ -102,6 +105,9 @@ cp local.settings.json.example local.settings.json
 - `AZURE_OPENAI_API_KEY` → [Azure AI Foundry](https://ai.azure.com) → Deployments → `gpt-5-mini-deploy` → copy **API Key**
 - `AZURE_OPENAI_ENDPOINT` → [Azure AI Foundry](https://ai.azure.com) → Deployments → `gpt-5-mini-deploy` → copy **Project endpoint**
 - `AZURE_STORAGE_CONNECTION_STRING` → leave as-is for local development (Azurite handles it)
+- `BASECAMP_USERNAME` / `BASECAMP_PASSWORD` → credentials for a Basecamp
+  account with the `Scrapping` role. Only needed for `--step push` (see
+  below) — every other step works without them.
 
 ---
 
@@ -142,11 +148,29 @@ Runs Azure OpenAI enrichment on sample job data. Confirms AI keys are working an
 
 ---
 
+**Step 4 — Push to Basecamp** (needs `BASECAMP_USERNAME`/`BASECAMP_PASSWORD`)
+```powershell
+python run_local.py --step push
+```
+Sends everything currently in `jobs_output.json` to the real
+`create-external-job` API on `basecamp-develop` — this creates actual job
+listings, not a preview. Never runs automatically as part of `--step all`;
+you have to trigger it deliberately. Already-pushed URLs are tracked in
+`debug/pushed_urls.json` so re-running this is safe — it only pushes jobs
+it hasn't sent before.
+
+> **Known gap**: the real endpoint currently has no way to attach a
+> company to jobs created this way (`CompanyId` stays unset server-side —
+> see `PAYLOAD_MAPPING_TODO.md`). Pushed jobs will show up without a
+> linked company until that's fixed on the API side.
+
+---
+
 **Full pipeline**
 ```powershell
 python run_local.py
 ```
-Runs all steps end-to-end: ATS fetch → Firecrawl scrape → dedup → enrich → save to Azurite.
+Runs all steps end-to-end except push: ATS fetch → Firecrawl scrape → dedup → enrich → save to Azurite. Run `--step push` separately when you're ready to actually publish.
 
 ---
 
@@ -189,7 +213,9 @@ basecampjobs-ai-scraper/
 │   ├── ats.py               # Greenhouse / Lever / SmartRecruiters API adapters
 │   ├── firecrawl.py         # Firecrawl scraper for JS-rendered career pages
 │   ├── fetcher.py           # Plain HTTP fetcher (static pages fallback)
-│   └── enrichment.py        # Azure OpenAI GPT-4o-mini batch enrichment
+│   ├── enrichment.py        # Azure OpenAI GPT-4o-mini batch enrichment
+│   ├── payload.py           # Maps enriched jobs to the create-external-job payload shape
+│   └── basecamp_client.py   # Real Basecamp API client (login + create-external-job)
 ├── storage/
 │   ├── cache.py             # Azure Table Storage URL deduplication
 │   └── writer.py            # Azure Table Storage job writer
