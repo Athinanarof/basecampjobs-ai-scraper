@@ -250,6 +250,8 @@ async def run_firecrawl():
 async def run_enrich(jobs=None):
     print("\n--- Enrich ---")
     jobs = jobs or SAMPLE_JOBS
+    print("Matching skills against Basecamp's own skill list...")
+    await basecamp_client.match_skills_batch(jobs)
     print(f"Enriching {len(jobs)} jobs with Azure OpenAI...")
     enriched = await batch_enrich(jobs, batch_size=20)
 
@@ -287,6 +289,7 @@ async def run_all():
     to_enrich = _cap(all_jobs, "enrich")
     print(f"[3/4] Total before enrich: {len(all_jobs)} → sending {len(to_enrich)} to AI")
 
+    await basecamp_client.match_skills_batch(to_enrich)
     enriched = await batch_enrich(to_enrich, batch_size=20)
     with_field = sum(1 for j in enriched if j.get("field"))
     print(f"[3/4] Enriched: {len(enriched)} jobs ({with_field} with field)")

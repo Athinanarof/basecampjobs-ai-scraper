@@ -6,7 +6,9 @@ Requires BASECAMP_USERNAME / BASECAMP_PASSWORD (a Scrapping-role account)
 and optionally BASECAMP_API_BASE_URL (defaults to the develop environment).
 """
 import os
+import asyncio
 import logging
+from typing import Dict, List
 import httpx
 
 DEFAULT_BASE_URL = "https://basecamp-develop.azurewebsites.net/api"
@@ -28,6 +30,39 @@ async def login() -> str:
         )
         resp.raise_for_status()
         return resp.json()["result"]["accessToken"]
+
+
+async def extract_skills(description: str) -> List[str]:
+    """Match raw job description text against Basecamp's own Skills table
+    (exact-phrase, server-side, no auth needed). Names returned here are
+    guaranteed to exist in their Skills table — use these for
+    qualifications.skills instead of AI-guessed names, which mostly won't
+    survive SkillsRepository's exact-match lookup."""
+    if not description:
+        return []
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post(
+            f"{_base_url()}/Job/extract-skills-from-job-description",
+            json={"jobDescription": description},
+        )
+        resp.raise_for_status()
+        return [s["name"] for s in resp.json()["result"]["skills"]]
+
+
+async def match_skills_batch(jobs: List[Dict], concurrency: int = 5) -> None:
+    """Mutate jobs in place, adding 'matched_skills' from Basecamp's own skill
+    extractor (run against raw_description, the fullest text available)."""
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def match_one(job: Dict):
+        async with semaphore:
+            try:
+                job["matched_skills"] = await extract_skills(job.get("raw_description") or "")
+            except Exception as e:
+                logging.warning(f"extract_skills failed for {job.get('url', '?')[:60]}: {e}")
+                job["matched_skills"] = []
+
+    await asyncio.gather(*[match_one(j) for j in jobs])
 
 
 async def create_job(payload: dict, token: str) -> str:
