@@ -7,6 +7,8 @@ import os
 from scraper.ats import fetch_all as fetch_ats
 from scraper.firecrawl import scrape_all as fetch_firecrawl
 from scraper.enrichment import batch_enrich
+from scraper.payload import build_payload
+from scraper import basecamp_client
 from storage.cache import filter_new, mark_seen
 from storage.writer import save_jobs
 
@@ -58,9 +60,24 @@ async def _run():
         logging.info("Nothing new — exiting")
         return
 
+    await basecamp_client.match_skills_batch(new_jobs)
     enriched = await batch_enrich(new_jobs, batch_size=20)
     logging.info(f"Enriched {len(enriched)} jobs")
 
     save_jobs(enriched)
+
+    outdoor_jobs = [j for j in enriched if j.get("is_outdoor_industry", True)]
+    logging.info(f"Publishing {len(outdoor_jobs)}/{len(enriched)} outdoor-industry jobs to Basecamp")
+
+    if outdoor_jobs:
+        try:
+            token = await basecamp_client.login()
+            payloads = [build_payload(j) for j in outdoor_jobs]
+            results = await basecamp_client.publish_payloads(payloads, token)
+            published = sum(1 for r in results if r["error"] is None)
+            logging.info(f"Published {published}/{len(outdoor_jobs)} jobs to Basecamp")
+        except Exception as e:
+            logging.error(f"Basecamp login failed — no jobs published this run: {e}")
+
     mark_seen([j["url"] for j in enriched])
     logging.info(f"Done — {len(enriched)} jobs saved")

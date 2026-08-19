@@ -1,6 +1,6 @@
 # basecampjobs-ai-scraper
 
-Automated job scraper for the Basecamp outdoor industry job board. Runs daily on Azure Functions, pulls job listings from outdoor industry companies via ATS APIs and Firecrawl, enriches them with Azure OpenAI, and stores results in Azure Table Storage.
+Automated job scraper for the Basecamp outdoor industry job board. Runs daily on Azure Functions, pulls job listings from outdoor industry companies via ATS APIs and Firecrawl, enriches them with Azure OpenAI, and publishes them straight to Basecamp.
 
 ---
 
@@ -11,11 +11,15 @@ Daily timer (6am UTC)
     ├── ATS APIs (Greenhouse / Lever / SmartRecruiters) → free structured JSON
     └── Firecrawl → scrapes any JS-rendered career page (REI, Workday, iCIMS, etc.)
          ↓
-    Deduplication (skip already-seen job URLs)
+    Deduplication (skip already-seen job URLs, via Azure Table Storage)
          ↓
-    Azure OpenAI GPT-5o-mini → enriches each job with field, niche, skills, etc.
+    Basecamp skill matching → matches scraped text against Basecamp's own Skills table
          ↓
-    Azure Table Storage → saves results
+    Azure OpenAI GPT-5o-mini → enriches each job with field, niche, employment type, etc.
+         ↓
+    Azure Table Storage → archives the enriched record
+         ↓
+    Basecamp API → publishes outdoor-industry jobs live (create-external-job)
 ```
 
 ---
@@ -243,6 +247,11 @@ Go to your Function App → Settings → Environment variables → add:
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_DEPLOYMENT`
 - `AZURE_STORAGE_CONNECTION_STRING`
+- `BASECAMP_USERNAME` / `BASECAMP_PASSWORD` — a Basecamp account with the
+  `Scrapping` role. The nightly run publishes straight to Basecamp now
+  (`function_app.py`), not just to Azure Table Storage — without these it
+  fetches and enriches jobs but can't publish them.
+- `BASECAMP_API_BASE_URL` — optional, defaults to the `develop` environment.
 
 **3. Connect GitHub Actions**
 

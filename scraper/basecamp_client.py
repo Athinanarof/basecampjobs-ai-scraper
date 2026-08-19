@@ -8,7 +8,7 @@ and optionally BASECAMP_API_BASE_URL (defaults to the develop environment).
 import os
 import asyncio
 import logging
-from typing import Dict, List
+from typing import Callable, Dict, List, Optional
 import httpx
 
 DEFAULT_BASE_URL = "https://basecamp-develop.azurewebsites.net/api"
@@ -77,3 +77,37 @@ async def create_job(payload: dict, token: str) -> str:
             logging.error(f"create-external-job failed [{resp.status_code}]: {resp.text[:500]}")
         resp.raise_for_status()
         return resp.json()["result"]
+
+
+async def publish_payloads(
+    payloads: List[Dict],
+    token: str,
+    on_result: Optional[Callable[[Dict], None]] = None,
+) -> List[Dict]:
+    """Publish already-built payloads (see scraper/payload.py: build_payload()) to
+    create-external-job, one at a time, isolating failures per job so one bad
+    payload doesn't abort the rest of the batch.
+
+    Returns one result dict per payload: {"url", "title", "job_id", "error"} —
+    job_id is set on success, error is set (job_id is None) on failure. Shared by
+    run_local.py's --step push and function_app.py's nightly run, so callers own
+    what happens with each result (console output + local dedup file vs. Azure
+    logging + Table Storage dedup) via the optional on_result callback, called
+    once per payload as results come in — not just at the end — so a caller can
+    persist progress incrementally instead of losing it all if something later
+    in the batch goes wrong.
+    """
+    results = []
+    for payload in payloads:
+        url = payload.get("howToApply", {}).get("urlOrEmail")
+        title = payload.get("title", "?")
+        try:
+            job_id = await create_job(payload, token)
+            result = {"url": url, "title": title, "job_id": job_id, "error": None}
+        except Exception as e:
+            logging.error(f"Failed to publish [{str(title)[:50]}]: {e}")
+            result = {"url": url, "title": title, "job_id": None, "error": str(e)}
+        results.append(result)
+        if on_result:
+            on_result(result)
+    return results

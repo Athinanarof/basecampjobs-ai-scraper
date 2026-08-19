@@ -159,21 +159,22 @@ async def run_push():
     print("  Logging in...")
     token = await basecamp_client.login()
 
-    succeeded, failed = 0, 0
-    for payload in to_push:
-        url = payload["howToApply"]["urlOrEmail"]
-        title = payload.get("title", "?")[:50]
-        try:
-            job_id = await basecamp_client.create_job(payload, token)
-            print(f"  [ok] {title} → {job_id}")
-            pushed.add(url)
-            _mark_pushed(pushed)  # persist after each success so a crash mid-run doesn't lose progress
-            succeeded += 1
-        except Exception as e:
-            print(f"  [FAIL] {title} — {e}")
-            failed += 1
+    counts = {"succeeded": 0, "failed": 0}
 
-    print(f"\n  Pushed: {succeeded} succeeded, {failed} failed, {skipped} already-pushed skipped")
+    def _on_result(result: dict):
+        title = str(result["title"])[:50]
+        if result["error"] is None:
+            print(f"  [ok] {title} → {result['job_id']}")
+            pushed.add(result["url"])
+            _mark_pushed(pushed)  # persist after each success so a crash mid-run doesn't lose progress
+            counts["succeeded"] += 1
+        else:
+            print(f"  [FAIL] {title} — {result['error']}")
+            counts["failed"] += 1
+
+    await basecamp_client.publish_payloads(to_push, token, on_result=_on_result)
+
+    print(f"\n  Pushed: {counts['succeeded']} succeeded, {counts['failed']} failed, {skipped} already-pushed skipped")
 
 
 SAMPLE_JOBS = [

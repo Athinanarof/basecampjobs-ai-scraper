@@ -1,10 +1,18 @@
 # Mapping to the Basecamp Job API — open items
 
 `scraper/payload.py` (`build_payload()`) reshapes an enriched job into an
-API payload. `scraper/basecamp_client.py` + `run_local.py --step push` now
-actually call the real endpoint (login + `create-external-job`) — opt-in
-only, never runs as part of `--step all`. Unresolved fields below are
-placeholders (`null` / `[]` / `false`).
+API payload. `scraper/basecamp_client.py` (login + `create-external-job` +
+the shared `publish_payloads()` helper) is used by both:
+- `run_local.py --step push` — opt-in only, never runs as part of
+  `--step all`, for local testing.
+- **`function_app.py`'s nightly run (as of 2026-08-19)** — publishes
+  outdoor-industry jobs to Basecamp automatically after enrichment, no
+  manual step. This was deliberately automated *before* the two known
+  gaps below were fixed (focus placeholder, missing CompanyId) — accepted
+  tradeoff to validate the integration on a real server run, not an
+  oversight.
+
+Unresolved fields below are placeholders (`null` / `[]` / `false`).
 
 ## Real endpoint details (found in `basecampjobs-core`, 2026-08-18)
 Checked the actual backend repo (`C:\Users\arace\Documents\Git\basecampjobs\basecampjobs-core`)
