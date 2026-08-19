@@ -7,6 +7,9 @@
     "FIRECRAWL_API_KEY": "<your-firecrawl-api-key>",
     "AZURE_OPENAI_API_KEY": "<your-azure-openai-key>",
     "AZURE_OPENAI_ENDPOINT": "https://<your-resource>.openai.azure.com/",
-    "AZURE_OPENAI_DEPLOYMENT": "gpt-5-mini-deploy"
+    "AZURE_OPENAI_DEPLOYMENT": "gpt-5-mini-deploy",
+    "BASECAMP_API_BASE_URL": "https://basecamp-develop.azurewebsites.net/api",
+    "BASECAMP_USERNAME": "<your-scrapping-role-username>",
+    "BASECAMP_PASSWORD": "<your-scrapping-role-password>"
   }
 }
