@@ -221,3 +221,4 @@ __marimo__/
 local.settings.json
 jobs_output.json
 debug/
+DEPLOYMENT_NOTES.md
