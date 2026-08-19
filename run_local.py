@@ -6,7 +6,10 @@ Flags:
   --step ats          fetch jobs from ATS APIs in companies.json (free, no AI)
   --step firecrawl    scrape Firecrawl companies (needs FIRECRAWL_API_KEY)
   --step enrich       run enrichment against sample data (needs AZURE_OPENAI_API_KEY)
-  --step all          run everything end-to-end (default)
+  --step push         push jobs_output.json to the real Basecamp API (needs
+                       BASECAMP_USERNAME/BASECAMP_PASSWORD) — creates real jobs
+                       on basecamp-develop. Never runs as part of --step all.
+  --step all          run everything end-to-end except push (default)
 """
 
 import asyncio
@@ -50,9 +53,11 @@ from scraper.ats import fetch_all as fetch_ats
 from scraper.firecrawl import scrape_all as fetch_firecrawl
 from scraper.enrichment import batch_enrich
 from scraper.payload import build_payload
+from scraper import basecamp_client
 
 OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "jobs_output.json")
 DEBUG_DIR = os.path.join(os.path.dirname(__file__), "debug")
+PUSHED_FILE = os.path.join(DEBUG_DIR, "pushed_urls.json")
 
 
 def save_debug(step: str, jobs: list, as_payload: bool = False):
@@ -112,6 +117,64 @@ def save_local(jobs):
         json.dump(list(by_url.values()), f, indent=2)
     print(f"  Saved: {added} new, {updated} updated → jobs_output.json ({len(by_url)} total)")
     return list(by_url.values())
+
+
+def _load_pushed() -> set:
+    if not os.path.exists(PUSHED_FILE):
+        return set()
+    with open(PUSHED_FILE) as f:
+        return set(json.load(f))
+
+
+def _mark_pushed(pushed: set):
+    os.makedirs(DEBUG_DIR, exist_ok=True)
+    with open(PUSHED_FILE, "w") as f:
+        json.dump(sorted(pushed), f, indent=2)
+
+
+async def run_push():
+    """Push jobs_output.json to the real Basecamp API. Creates real jobs on
+    basecamp-develop — only run this deliberately, never as part of --step all.
+
+    Tracks already-pushed URLs in debug/pushed_urls.json so re-running this
+    doesn't create duplicate live listings.
+    """
+    print("\n--- Push to Basecamp API ---")
+
+    if not os.path.exists(OUTPUT_FILE):
+        print("  No jobs_output.json found — run the pipeline first.")
+        return
+
+    with open(OUTPUT_FILE) as f:
+        payloads = json.load(f)
+
+    pushed = _load_pushed()
+    to_push = [p for p in payloads if p.get("howToApply", {}).get("urlOrEmail") not in pushed]
+    skipped = len(payloads) - len(to_push)
+
+    print(f"  {len(payloads)} total, {skipped} already pushed, {len(to_push)} to push")
+    if not to_push:
+        return
+
+    print("  Logging in...")
+    token = await basecamp_client.login()
+
+    succeeded, failed = 0, 0
+    for payload in to_push:
+        url = payload["howToApply"]["urlOrEmail"]
+        title = payload.get("title", "?")[:50]
+        try:
+            job_id = await basecamp_client.create_job(payload, token)
+            print(f"  [ok] {title} → {job_id}")
+            pushed.add(url)
+            _mark_pushed(pushed)  # persist after each success so a crash mid-run doesn't lose progress
+            succeeded += 1
+        except Exception as e:
+            print(f"  [FAIL] {title} — {e}")
+            failed += 1
+
+    print(f"\n  Pushed: {succeeded} succeeded, {failed} failed, {skipped} already-pushed skipped")
+
 
 SAMPLE_JOBS = [
     {
@@ -246,5 +309,7 @@ if __name__ == "__main__":
         asyncio.run(run_firecrawl())
     elif step == "enrich":
         asyncio.run(run_enrich())
+    elif step == "push":
+        asyncio.run(run_push())
     else:
         asyncio.run(run_all())
