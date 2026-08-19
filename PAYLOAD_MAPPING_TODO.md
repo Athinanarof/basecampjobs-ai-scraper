@@ -178,10 +178,20 @@ lookup table, add it back:
 - `isHQPosition` — hardcoded `false`, no data source.
 
 ## Taxonomy mismatch
-- `qualifications.focuses` — currently populated from our `field` value
-  (e.g. "Ski/Snow", "Outdoor Retail"). Now confirmed via `basecampjobs-core`
-  that `Focuses` needs real `{id, name}` pairs from Basecamp's own focus
-  list (same `GET /api/Job/options/get` response as skills) — our `field`
-  taxonomy is a guess and won't have valid IDs. Same fix path as skills:
-  match against the real list, exact first, fuzzy later.
+- `qualifications.focuses` — **PLACEHOLDER as of 2026-08-19**: hardcoded to
+  `["Data"]` (`PLACEHOLDER_FOCUS` in `payload.py`) for every job, regardless
+  of content. This was previously populated from our AI's `field` value
+  (e.g. "Ski/Snow", "Outdoor Retail") — confirmed wrong via live testing:
+  `field` is an industry taxonomy, Basecamp's real `Focuses` list (`GET
+  /api/Job/options/get`, 278 entries) is job-function names ("Account
+  Management", "Business Development") — a different dimension entirely,
+  so `field` never matched. `focuses` can't be empty either — `JobService.cs:360`
+  crashes with `500` (`"Sequence contains no elements"`) on an empty list,
+  confirmed via 10 live push failures. `"Data"` was picked only because
+  it's a real, confirmed exact-match placeholder that unblocks pushing —
+  it is **not a real focus for any of these jobs**. Real fix: classify
+  against the actual 278-entry list during enrichment, same approach
+  needed for skills (though skills has Basecamp's own extraction endpoint
+  to lean on; focuses has no equivalent, would need our own AI matching
+  against the fetched list).
 - `niche` (our field) has no home in the target payload at all — dropped.
