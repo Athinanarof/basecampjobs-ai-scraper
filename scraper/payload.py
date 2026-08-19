@@ -35,6 +35,14 @@ REMOTE_STATUS_MAP = {
     "hybrid": 5,
 }
 
+# PLACEHOLDER — our AI's `field` classification ("Outdoor Retail", "Ski/Snow") is an industry
+# taxonomy; Basecamp's real Focuses list (GET /api/Job/options/get) is job-function names
+# ("Account Management", "Business Development") — a different dimension entirely, so `field`
+# never matches. Focuses cannot be empty (JobService.cs:360 crashes with 500 on empty), so
+# "Data" is used as a real, exact-match placeholder until proper focus-taxonomy mapping is
+# built (see PAYLOAD_MAPPING_TODO.md). Confirmed live: "Data" exists in their Focuses table.
+PLACEHOLDER_FOCUS = "Data"
+
 
 def _description_html(text: str) -> str:
     """Render markdown/plain text into real HTML. Existing HTML (e.g. Greenhouse's
@@ -49,12 +57,18 @@ def build_payload(job: Dict) -> Dict:
     title = job.get("title") or job.get("raw_title") or ""
     description = job.get("description") or job.get("raw_description") or ""
     location = job.get("location") or job.get("raw_location")
-    skills = job.get("skills") or []
-    field = job.get("field")
+    # matched_skills comes from Basecamp's own extract-skills-from-job-description endpoint
+    # (scraper/basecamp_client.py) — guaranteed to exist in their Skills table, unlike our
+    # AI-guessed skill names which mostly won't survive their exact-match lookup. Falls back
+    # to the AI's own guesses only if skill-matching was never run for this job.
+    skills = job["matched_skills"] if "matched_skills" in job else (job.get("skills") or [])
     employment_type = job.get("employment_type")
     remote_status = job.get("remote_status")
 
-    job_type_id = JOB_TYPE_MAP.get(employment_type)
+    # jobTypeId is non-nullable server-side — fall back to "other" as a placeholder
+    # when we can't resolve a real value, rather than sending null (which the whole
+    # request gets rejected for).
+    job_type_id = JOB_TYPE_MAP.get(employment_type) or JOB_TYPE_MAP["other"]
     remote_status_id = REMOTE_STATUS_MAP.get(remote_status)
 
     return {
@@ -62,7 +76,7 @@ def build_payload(job: Dict) -> Dict:
 
         "jobTypeId": job_type_id,
         # Only carry the raw text when we couldn't map it (or it's genuinely "other") — otherwise jobTypeId already says it.
-        "jobTypeOther": employment_type if (job_type_id is None or job_type_id == JOB_TYPE_MAP["other"]) else None,
+        "jobTypeOther": employment_type if (employment_type not in JOB_TYPE_MAP or job_type_id == JOB_TYPE_MAP["other"]) else None,
 
         "remoteStatusId": remote_status_id,
         "isRemoteConsidered": job.get("is_remote_considered") or False,
@@ -89,7 +103,7 @@ def build_payload(job: Dict) -> Dict:
             # Plain name strings (ExternalJobQualificationsViewModel) — server does exact-match
             # lookup against its own Focus/Skill tables server-side; non-matching names are
             # silently dropped, not created. See PAYLOAD_MAPPING_TODO.md.
-            "focuses": [field] if field else [],
+            "focuses": [PLACEHOLDER_FOCUS],
             "skills": list(skills),
         },
 
