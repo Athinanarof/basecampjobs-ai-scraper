@@ -13,6 +13,7 @@ no company field. It's known from whichever companies.json entry produced
 the job in the first place, not something that needs to travel through here.
 """
 from typing import Dict
+import markdown as _markdown
 
 # Basecamp's public enum JobType
 JOB_TYPE_MAP = {
@@ -33,6 +34,15 @@ REMOTE_STATUS_MAP = {
     "onsite": 4,
     "hybrid": 5,
 }
+
+
+def _description_html(text: str) -> str:
+    """Render markdown/plain text into real HTML. Existing HTML (e.g. Greenhouse's
+    content field) passes through mostly unchanged — python-markdown leaves
+    recognized block-level HTML alone rather than re-escaping it."""
+    if not text:
+        return ""
+    return _markdown.markdown(text)
 
 
 def build_payload(job: Dict) -> Dict:
@@ -62,21 +72,25 @@ def build_payload(job: Dict) -> Dict:
         "isCommuterBenefits": job.get("is_commuter_benefits") or False,
 
         "introduction": job.get("introduction"),
-        "description": f"<p>{description}</p>" if description else "",
+        "description": _description_html(description),
 
         "additionalLocationInformation": location,
         "locations": [],
 
         "salaryCompensation": {
-            "min": job.get("salary_min"),
-            "max": job.get("salary_max"),
+            # min/max must be real decimals server-side (non-nullable) — 0 is the safe default when unknown.
+            "min": job.get("salary_min") or 0,
+            "max": job.get("salary_max") or 0,
             "salaryCompensation": job.get("salary_range"),
         },
 
         "qualifications": {
             "isManagementRequired": job.get("is_management_required"),
-            "focuses": [{"name": field}] if field else [],
-            "skills": [{"name": s} for s in skills],
+            # Plain name strings (ExternalJobQualificationsViewModel) — server does exact-match
+            # lookup against its own Focus/Skill tables server-side; non-matching names are
+            # silently dropped, not created. See PAYLOAD_MAPPING_TODO.md.
+            "focuses": [field] if field else [],
+            "skills": list(skills),
         },
 
         "howToApply": {
