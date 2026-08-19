@@ -1,8 +1,10 @@
 # Mapping to the Basecamp Job API — open items
 
 `scraper/payload.py` (`build_payload()`) reshapes an enriched job into an
-API payload. It's a preview only — nothing calls the endpoint yet.
-Unresolved fields below are placeholders (`null` / `[]` / `false`).
+API payload. `scraper/basecamp_client.py` + `run_local.py --step push` now
+actually call the real endpoint (login + `create-external-job`) — opt-in
+only, never runs as part of `--step all`. Unresolved fields below are
+placeholders (`null` / `[]` / `false`).
 
 ## Real endpoint details (found in `basecampjobs-core`, 2026-08-18)
 Checked the actual backend repo (`C:\Users\arace\Documents\Git\basecampjobs\basecampjobs-core`)
@@ -88,11 +90,54 @@ Still need: wire these into `payload.py` as maps (same pattern as
 signal needed to pick a value (years-of-experience mentions, benefits
 mentioned in the posting).
 
-## Not started yet
-- **Actual API integration** — nothing in this codebase calls the real
-  endpoint yet. `payload.py` only builds a local preview object
-  (`jobs_output.json`/debug files). Still need: auth (login + token reuse),
-  the real HTTP call to `create-external-job`, and response/error handling.
+## API integration — built and tested live; wrong payload shape fixed, one real blocker remains
+`scraper/basecamp_client.py` (`login()`, `create_job()`) + `run_local.py
+--step push` call the real API: logs in once, POSTs each job from
+`jobs_output.json` to `create-external-job`, tracks already-pushed URLs in
+`debug/pushed_urls.json` so re-running is safe. Login confirmed working
+live (2026-08-18) with real credentials.
+
+**Fixed on our side**: `salaryCompensation.min`/`max` now default to `0`
+instead of `null` — confirmed live that `0` passes validation (`min`/`max`
+are non-nullable `decimal` server-side).
+
+**CORRECTION (2026-08-19)**: the "positional deserialization bug" theory
+below was wrong. Root cause: `scraper/payload.py` was sending
+`qualifications.focuses`/`skills` as `[{"name": "..."}]` objects, matching
+the old `UpdateQualificationsViewModel` (`IList<NameIdDto>`). The real
+model for this endpoint is `ExternalJobQualificationsViewModel`
+(`BasecampJobs.Common/ViewModels/Job/Post/ExternalJobQualificationsViewModel.cs`),
+which expects **plain string arrays** — `["Outdoor Retail"]`, not
+`[{"name": "Outdoor Retail"}]`. That's why the parser choked on `{`. This
+file only exists on the `develop` branch (added 2026-07-22, commit
+`a890a7f9` "scrapping updates") — the investigation that produced the
+"positional" theory was done against a local checkout still on `main`,
+which never had this file, so the mismatch wasn't visible from the code.
+Fixed in `payload.py`: `focuses`/`skills` now send plain strings.
+
+**Still a real, confirmed bug on `develop`**: unconditional `.First()` on
+`Focuses` — `JobService.cs:360` —
+`job.Qualifications.JobFieldId = await _focusRepository.GetJobFieldId(model.Focuses.First().Id);`
+— no null/empty check. If `focuses` ends up empty, this crashes with `500`
+/ `"Sequence contains no elements"`.
+
+**Also confirmed**: `FocusRepository.MapCollection()` (and presumably the
+equivalent for skills/visions/benefits/outdoor industries) does **exact
+string matching** against their own DB tables (`Where(f =>
+incoming.Contains(f.Name))`) — a name that doesn't exactly match an
+existing row is silently dropped, not created. So our AI-generated `field`
+taxonomy won't reliably match Basecamp's real focus names, and could
+regularly end up empty — which would then hit the `.First()` crash above.
+Need real name-matching against `GET /api/Job/options/get`'s `Focuses`
+list before this is trustworthy (same problem already tracked for skills
+elsewhere in this doc).
+
+**Known blocker, also found while building this**: `CreateFromExternalJobAsync`
+(`JobService.cs`) never sets `job.CompanyId` — it's nullable and stays
+`null` for every job created this way, since `ExternalJobViewModel` has no
+company field for it to come from and the method doesn't derive it from
+the logged-in user's company. Endpoint won't reject the request on its
+own for this (field is optional) — separate issue from the blocker above.
 
 ## Removed from the payload — revisit once resolved
 These fields were dropped from `build_payload()`'s output entirely (not
