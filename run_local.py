@@ -4,7 +4,7 @@ Run with: python run_local.py
 
 Flags:
   --step ats          fetch jobs from ATS APIs in companies.json (free, no AI)
-  --step firecrawl    scrape Firecrawl companies (needs FIRECRAWL_API_KEY)
+  --step firecrawl    scrape Firecrawl companies (needs FIRECRAWL_API_KEY and Azurite running)
   --step enrich       run enrichment against sample data (needs AZURE_OPENAI_API_KEY)
   --step push         push jobs_output.json to the real Basecamp API (needs
                        BASECAMP_USERNAME/BASECAMP_PASSWORD) — creates real jobs

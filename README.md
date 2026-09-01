@@ -140,11 +140,11 @@ Fetches jobs from Greenhouse, Lever, and SmartRecruiters for all companies in `c
 
 ---
 
-**Step 2 — Firecrawl** (needs `FIRECRAWL_API_KEY`)
+**Step 2 — Firecrawl** (needs `FIRECRAWL_API_KEY` and Azurite running — see above)
 ```powershell
 python run_local.py --step firecrawl
 ```
-Scrapes career pages for companies marked `"ats": "firecrawl"` in `companies.json` (e.g. REI, Backcountry). Uses Firecrawl credits.
+Scrapes career pages for companies marked `"ats": "firecrawl"` in `companies.json` (e.g. REI, Backcountry). Only scrapes job URLs not already in the dedup cache (Azure Table Storage), so it needs Azurite running even for this step alone. Uses Firecrawl credits.
 
 ---
 

@@ -7,6 +7,8 @@ from typing import List, Dict, Optional
 from firecrawl import FirecrawlApp
 from selectolax.parser import HTMLParser
 
+from storage.cache import filter_new
+
 # URL patterns that indicate a job detail page
 JOB_URL_PATTERNS = ["/jobs/", "/job/", "/position/", "/opening/", "/posting/", "/careers/detail"]
 
@@ -121,12 +123,23 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
         logging.warning(f"{name}: no job URLs matched after filtering")
         return []
 
+    new_urls = filter_new(job_urls)
+    already_known = len(job_urls) - len(new_urls)
+    logging.info(f"{name}: {len(new_urls)} not yet scraped, {already_known} already known")
+
+    if not new_urls:
+        logging.info(f"{name}: nothing new to scrape")
+        return []
+
     # Step 2: Scrape each job page, capped per company per run via
     # FIRECRAWL_JOBS_PER_COMPANY (defaults to 5 — see local.settings.json.example).
+    # Only spends credits on URLs not already in the dedup cache, so scraping
+    # walks forward through a company's listings over time instead of
+    # re-scraping the same already-known pages every run.
     # Free plan: 10 req/min — sleep 7s between requests to stay under limit
     import time
     jobs = []
-    for url in job_urls[:_jobs_per_company_cap()]:
+    for url in new_urls[:_jobs_per_company_cap()]:
         try:
             result = client.scrape_url(url, formats=["markdown", "rawHtml"])
             raw_md = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
