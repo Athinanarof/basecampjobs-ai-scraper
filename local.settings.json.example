@@ -5,6 +5,7 @@
     "FUNCTIONS_WORKER_RUNTIME": "python",
     "AZURE_STORAGE_CONNECTION_STRING": "<your-storage-connection-string>",
     "FIRECRAWL_API_KEY": "<your-firecrawl-api-key>",
+    "FIRECRAWL_JOBS_PER_COMPANY": "5",
     "AZURE_OPENAI_API_KEY": "<your-azure-openai-key>",
     "AZURE_OPENAI_ENDPOINT": "https://<your-resource>.openai.azure.com/",
     "AZURE_OPENAI_DEPLOYMENT": "gpt-5-mini-deploy",

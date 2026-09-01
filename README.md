@@ -91,6 +91,7 @@ cp local.settings.json.example local.settings.json
     "FUNCTIONS_WORKER_RUNTIME": "python",
     "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;...",
     "FIRECRAWL_API_KEY": "fc-xxxxxxxxxxxxxxxx",
+    "FIRECRAWL_JOBS_PER_COMPANY": "5",
     "AZURE_OPENAI_API_KEY": "your-azure-openai-key",
     "AZURE_OPENAI_ENDPOINT": "https://your-resource.openai.azure.com/",
     "AZURE_OPENAI_DEPLOYMENT": "gpt-4o-mini",
@@ -106,6 +107,11 @@ cp local.settings.json.example local.settings.json
 **Where to find each key:**
 
 - `FIRECRAWL_API_KEY` → [firecrawl.dev](https://firecrawl.dev) → Dashboard → API Keys
+- `FIRECRAWL_JOBS_PER_COMPANY` → optional, defaults to `5`. Caps how many job
+  pages get scraped per Firecrawl company (REI, Backcountry) per run — raise
+  it to pull more of each company's listings, at the cost of more Firecrawl
+  credits and a longer run (`scraper/firecrawl.py` sleeps 7s between requests
+  to stay under the free plan's rate limit).
 - `AZURE_OPENAI_API_KEY` → [Azure AI Foundry](https://ai.azure.com) → Deployments → `gpt-5-mini-deploy` → copy **API Key**
 - `AZURE_OPENAI_ENDPOINT` → [Azure AI Foundry](https://ai.azure.com) → Deployments → `gpt-5-mini-deploy` → copy **Project endpoint**
 - `AZURE_STORAGE_CONNECTION_STRING` → leave as-is for local development (Azurite handles it)
@@ -243,6 +249,7 @@ basecampjobs-ai-scraper/
 
 Go to your Function App → Settings → Environment variables → add:
 - `FIRECRAWL_API_KEY`
+- `FIRECRAWL_JOBS_PER_COMPANY` — optional, defaults to `5`. See Configuration above.
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_DEPLOYMENT`
@@ -283,5 +290,10 @@ Each Firecrawl company uses:
 | REI | ~200 | ~201 |
 | Backcountry | ~50 | ~51 |
 | **Total (current list)** | | **~252 credits** |
+
+> This table assumes every active job gets scraped. In practice each run only
+> scrapes the first `FIRECRAWL_JOBS_PER_COMPANY` job pages per company
+> (default `5`, see Configuration above), so real usage is well under this
+> table until that's raised.
 
 The free tier (1,000 credits/month) comfortably covers the current company list with room for ~3 more REI-sized companies. All companies on Greenhouse, Lever, and SmartRecruiters use their free public APIs and cost **zero Firecrawl credits** regardless of job volume.

@@ -81,6 +81,13 @@ def _get_client() -> FirecrawlApp:
     return _client
 
 
+def _jobs_per_company_cap() -> int:
+    """How many job pages to scrape per Firecrawl company per run. Optional —
+    defaults to 5. Raise this to scrape more of each company's listings, at
+    the cost of more Firecrawl credits and a longer run (7s sleep/request)."""
+    return int(os.environ.get("FIRECRAWL_JOBS_PER_COMPANY", "5"))
+
+
 async def scrape_all(companies: List[Dict]) -> List[Dict]:
     """Scrape all Firecrawl companies with max 3 concurrent to respect rate limits."""
     semaphore = asyncio.Semaphore(3)
@@ -114,11 +121,12 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
         logging.warning(f"{name}: no job URLs matched after filtering")
         return []
 
-    # Step 2: Scrape each job page (cap at 50 per company per run)
+    # Step 2: Scrape each job page, capped per company per run via
+    # FIRECRAWL_JOBS_PER_COMPANY (defaults to 5 — see local.settings.json.example).
     # Free plan: 10 req/min — sleep 7s between requests to stay under limit
     import time
     jobs = []
-    for url in job_urls[:5]:
+    for url in job_urls[:_jobs_per_company_cap()]:
         try:
             result = client.scrape_url(url, formats=["markdown", "rawHtml"])
             raw_md = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
