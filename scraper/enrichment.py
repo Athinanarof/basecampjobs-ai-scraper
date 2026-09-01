@@ -4,6 +4,8 @@ import logging
 from typing import List, Dict
 from openai import OpenAI
 
+from scraper.salary import extract_salary
+
 _client: OpenAI | None = None
 
 
@@ -32,9 +34,6 @@ Each entry must have:
   field         (e.g. "Cycling", "Outdoor Retail", "Ski/Snow", "Paddle Sports", "Climbing", "Trail Running", "Hunting/Fishing")
   niche         (specific area within field, e.g. "Mountain Bike", "Backcountry Ski", "SUP")
   skills        (array of strings, max 8)
-  salary_range  (string or null — the salary text as written, e.g. "$95k-$115k" or "$17.84/hr")
-  salary_min    (number or null — lower bound parsed from salary_range, same unit as written, no conversion)
-  salary_max    (number or null — upper bound parsed from salary_range, same unit as written, no conversion)
   is_outdoor_industry (boolean — false if clearly unrelated)
   is_remote_considered   (boolean — true only if posting says remote/hybrid/work-from-home is an option)
   is_management_required (boolean — true only if the role requires managing/supervising other employees)
@@ -56,7 +55,8 @@ async def batch_enrich(jobs: List[Dict], batch_size: int = 20) -> List[Dict]:
         batch = jobs[i : i + batch_size]
         results = _enrich_batch(batch)
         for job, result in zip(batch, results):
-            enriched.append({**job, **result})
+            salary = extract_salary(job.get("raw_description", ""))
+            enriched.append({**job, **result, **salary})
 
     return enriched
 
