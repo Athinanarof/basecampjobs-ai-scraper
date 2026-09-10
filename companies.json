@@ -8,5 +8,8 @@
   {"name": "Hydro Flask",     "ats": "greenhouse",      "slug": "hydroflask"},
   {"name": "Norrona",         "ats": "greenhouse",      "slug": "norrona"},
   {"name": "REI",             "ats": "firecrawl",       "url": "https://rei.jobs/jobs"},
-  {"name": "Backcountry",     "ats": "firecrawl",       "url": "https://jobs.lever.co/cscgeneration-2"}
+  {"name": "Patagonia",       "ats": "firecrawl",       "url": "https://www.patagonia.com/careers/"},
+  {"name": "The North Face",  "ats": "firecrawl",       "url": "https://www.thenorthface.com/en-us/about-us/careers"},
+  {"name": "VF Corporation",  "ats": "firecrawl",       "url": "https://vfc.wd5.myworkdayjobs.com/vfc_careers"},
+  {"name": "Vail Resorts",  "ats": "firecrawl",         "url": "https://jobs.vailresortscareers.com/"}
 ]
