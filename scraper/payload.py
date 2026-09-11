@@ -39,12 +39,10 @@ REMOTE_STATUS_MAP = {
     "hybrid": 5,
 }
 
-# PLACEHOLDER — our AI's `field` classification ("Outdoor Retail", "Ski/Snow") is an industry
-# taxonomy; Basecamp's real Focuses list (GET /api/Job/options/get) is job-function names
-# ("Account Management", "Business Development") — a different dimension entirely, so `field`
-# never matches. Focuses cannot be empty (JobService.cs:360 crashes with 500 on empty), so
-# "Data" is used as a real, exact-match placeholder until proper focus-taxonomy mapping is
-# built (see PAYLOAD_MAPPING_TODO.md). Confirmed live: "Data" exists in their Focuses table.
+# Fallback only, used when Basecamp's own focus extractor (matched_focuses,
+# scraper/basecamp_client.py:extract_focuses) returns nothing for a job. Focuses can't
+# be empty server-side (JobService.cs:360 crashes with 500 on empty). "Data" is a
+# real focus, confirmed against the live Focuses table.
 PLACEHOLDER_FOCUS = "Data"
 
 # Basecamp's public enum SalaryCompensation — keyed on the period scraper/salary.py
@@ -128,6 +126,11 @@ def build_payload(job: Dict) -> Dict:
     # AI-guessed skill names which mostly won't survive their exact-match lookup. Falls back
     # to the AI's own guesses only if skill-matching was never run for this job.
     skills = job["matched_skills"] if "matched_skills" in job else (job.get("skills") or [])
+    # matched_focuses comes from Basecamp's own extract-field-focus-from-job-description
+    # endpoint, guaranteed to exist in their Focuses table. Falls back to PLACEHOLDER_FOCUS
+    # when matching wasn't run or came back empty, since focuses can't be empty server-side
+    # (JobService.cs:360 crashes with 500 on empty).
+    focuses = job.get("matched_focuses") or [PLACEHOLDER_FOCUS]
     employment_type = job.get("employment_type")
     remote_status = job.get("remote_status")
 
@@ -169,7 +172,7 @@ def build_payload(job: Dict) -> Dict:
             # Plain name strings (ExternalJobQualificationsViewModel) — server does exact-match
             # lookup against its own Focus/Skill tables server-side; non-matching names are
             # silently dropped, not created. See PAYLOAD_MAPPING_TODO.md.
-            "focuses": [PLACEHOLDER_FOCUS],
+            "focuses": list(focuses),
             "skills": list(skills),
         },
 

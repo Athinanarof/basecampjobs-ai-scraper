@@ -205,7 +205,7 @@ SAMPLE_JOBS = [
 def _print_job_sample(jobs: list, n: int = 5):
     for j in jobs[:n]:
         desc_len = len(j.get("raw_description") or "")
-        enriched_fields = [k for k in ("title", "field", "niche", "skills") if k in j]
+        enriched_fields = [k for k in ("title", "skills") if k in j]
         tag = f" [enriched: {', '.join(enriched_fields)}]" if enriched_fields else ""
         print(f"  [{j.get('raw_company', '?'):20s}] {str(j.get('raw_title', ''))[:45]}  desc={desc_len}ch{tag}")
     if len(jobs) > n:
@@ -251,17 +251,17 @@ async def run_firecrawl():
 async def run_enrich(jobs=None):
     print("\n--- Enrich ---")
     jobs = jobs or SAMPLE_JOBS
-    print("Matching skills against Basecamp's own skill list...")
+    print("Matching skills and focuses against Basecamp's own lists...")
     await basecamp_client.match_skills_batch(jobs)
+    await basecamp_client.match_focuses_batch(jobs)
     print(f"Enriching {len(jobs)} jobs with Azure OpenAI...")
     enriched = await batch_enrich(jobs, batch_size=20)
 
-    with_field = sum(1 for j in enriched if j.get("field"))
     with_skills = sum(1 for j in enriched if j.get("skills"))
     outdoor = sum(1 for j in enriched if j.get("is_outdoor_industry"))
-    print(f"\nResults: {len(enriched)} enriched | field={with_field} | skills={with_skills} | outdoor={outdoor}")
+    print(f"\nResults: {len(enriched)} enriched | skills={with_skills} | outdoor={outdoor}")
     for j in enriched:
-        print(f"  {str(j.get('title', 'n/a'))[:40]:40s} | {j.get('field', '?')} / {j.get('niche', '?')}  outdoor={j.get('is_outdoor_industry', '?')}")
+        print(f"  {str(j.get('title', 'n/a'))[:40]:40s} | {j.get('employment_type', '?')}  outdoor={j.get('is_outdoor_industry', '?')}")
 
     save_debug("step_3_enriched", enriched)
     save_debug("step_4_payload", enriched, as_payload=True)
@@ -291,9 +291,10 @@ async def run_all():
     print(f"[3/4] Total before enrich: {len(all_jobs)} → sending {len(to_enrich)} to AI")
 
     await basecamp_client.match_skills_batch(to_enrich)
+    await basecamp_client.match_focuses_batch(to_enrich)
     enriched = await batch_enrich(to_enrich, batch_size=20)
-    with_field = sum(1 for j in enriched if j.get("field"))
-    print(f"[3/4] Enriched: {len(enriched)} jobs ({with_field} with field)")
+    with_skills = sum(1 for j in enriched if j.get("skills"))
+    print(f"[3/4] Enriched: {len(enriched)} jobs ({with_skills} with skills)")
     save_debug("step_3_enriched", enriched)
     save_debug("step_4_payload", enriched, as_payload=True)
 

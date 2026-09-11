@@ -29,16 +29,15 @@ def save_jobs(jobs: List[Dict]) -> None:
             continue
 
         try:
+            company = job.get("company") or job.get("raw_company", "")
             client.upsert_entity({
-                "PartitionKey": job.get("field", "unknown"),
+                "PartitionKey": company or "unknown",
                 "RowKey": hashlib.sha256(job["url"].encode()).hexdigest()[:32],
                 "url": job["url"],
                 "title": job.get("title") or job.get("raw_title", ""),
-                "company": job.get("company") or job.get("raw_company", ""),
+                "company": company,
                 "location": job.get("location") or job.get("raw_location", ""),
                 "employment_type": job.get("employment_type", ""),
-                "field": job.get("field", ""),
-                "niche": job.get("niche", ""),
                 "skills": json.dumps(job.get("skills", [])),
                 "salary_range": job.get("salary_range", ""),
                 "scraped_at": datetime.now(timezone.utc).isoformat(),

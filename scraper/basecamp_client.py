@@ -72,6 +72,42 @@ async def match_skills_batch(jobs: List[Dict], concurrency: int = 5) -> None:
     await asyncio.gather(*[match_one(j) for j in jobs])
 
 
+async def extract_focuses(description: str) -> List[str]:
+    """Match raw job description text against Basecamp's own Focuses table
+    (exact-phrase, server-side, no auth needed), same mechanism as extract_skills.
+    Replaces the AI's own `field` guess (a different, incompatible taxonomy) and
+    the "Data" placeholder previously used to unblock pushing. Returns
+    `suggestedFocuses`, the subset tied to whichever single field matched the
+    most focuses, since a job is saved with exactly one field (JobService.cs
+    derives it from the first focus id)."""
+    if not description:
+        return []
+    async with httpx.AsyncClient(timeout=20, verify=_verify_ssl()) as client:
+        resp = await client.post(
+            f"{_base_url()}/Job/extract-field-focus-from-job-description",
+            json={"jobDescription": description},
+        )
+        resp.raise_for_status()
+        return [f["name"] for f in resp.json()["result"]["suggestedFocuses"]]
+
+
+async def match_focuses_batch(jobs: List[Dict], concurrency: int = 5) -> None:
+    """Mutate jobs in place, adding 'matched_focuses' from Basecamp's own
+    field/focus extractor (run against raw_description, the fullest text
+    available)."""
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def match_one(job: Dict):
+        async with semaphore:
+            try:
+                job["matched_focuses"] = await extract_focuses(job.get("raw_description") or "")
+            except Exception as e:
+                logging.warning(f"extract_focuses failed for {job.get('url', '?')[:60]}: {e}")
+                job["matched_focuses"] = []
+
+    await asyncio.gather(*[match_one(j) for j in jobs])
+
+
 async def create_job(payload: dict, token: str) -> str:
     """POST a payload (see scraper/payload.py) to create-external-job. Returns the created job id."""
     async with httpx.AsyncClient(timeout=30, verify=_verify_ssl()) as client:

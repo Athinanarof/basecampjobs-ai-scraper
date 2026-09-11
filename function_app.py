@@ -61,6 +61,7 @@ async def _run():
         return
 
     await basecamp_client.match_skills_batch(new_jobs)
+    await basecamp_client.match_focuses_batch(new_jobs)
     enriched = await batch_enrich(new_jobs, batch_size=20)
     logging.info(f"Enriched {len(enriched)} jobs")
 
