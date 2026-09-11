@@ -63,7 +63,15 @@ def _extract_jobposting_jsonld(html: str) -> Dict:
 
 
 def _location_from_jsonld(jobposting: Dict) -> Optional[str]:
-    address = (jobposting.get("jobLocation") or {}).get("address") or {}
+    # schema.org allows jobLocation to be either a single Place or an array of them
+    # (REI posts some multi-site roles this way) — use the first entry either way.
+    job_location = jobposting.get("jobLocation") or {}
+    if isinstance(job_location, list):
+        job_location = job_location[0] if job_location else {}
+    if not isinstance(job_location, dict):
+        return None
+
+    address = job_location.get("address") or {}
     if not isinstance(address, dict):
         return None
     city = address.get("addressLocality")
