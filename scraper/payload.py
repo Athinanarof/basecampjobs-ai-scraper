@@ -46,6 +46,31 @@ REMOTE_STATUS_MAP = {
 # built (see PAYLOAD_MAPPING_TODO.md). Confirmed live: "Data" exists in their Focuses table.
 PLACEHOLDER_FOCUS = "Data"
 
+# Basecamp's public enum SalaryCompensation — keyed on the period scraper/salary.py
+# detects from the posting's own text (e.g. "per hour" -> "hour"). No entry covers
+# "ContractLength" (5) — nothing in the scraped text maps to that today.
+SALARY_COMPENSATION_MAP = {
+    "year": 1,
+    "hour": 2,
+    "week": 3,
+    "month": 4,
+    "day": 6,
+}
+
+
+def _salary_compensation(job: Dict) -> Dict:
+    salary_compensation_id = SALARY_COMPENSATION_MAP.get(job.get("salary_period"))
+    # Don't report min/max at all when we can't also determine the period — a number
+    # with no unit label is worse than no number (confirmed: shows "undefined" in the UI).
+    if salary_compensation_id is None:
+        return {"min": 0, "max": 0, "salaryCompensation": None}
+    return {
+        "min": job.get("salary_min") or 0,
+        "max": job.get("salary_max") or 0,
+        "salaryCompensationId": salary_compensation_id,
+        "salaryCompensation": job.get("salary_range"),
+    }
+
 
 def _description_html(text: str) -> str:
     """Render markdown/plain text into real HTML. Existing HTML (e.g. Greenhouse's
@@ -94,12 +119,12 @@ def build_payload(job: Dict) -> Dict:
         "additionalLocationInformation": location,
         "locations": [],
 
-        "salaryCompensation": {
-            # min/max must be real decimals server-side (non-nullable) — 0 is the safe default when unknown.
-            "min": job.get("salary_min") or 0,
-            "max": job.get("salary_max") or 0,
-            "salaryCompensation": job.get("salary_range"),
-        },
+        # salaryCompensationId is non-nullable server-side and has no "unknown" value —
+        # sending min/max without it shows as "undefined" in the UI (confirmed live), so
+        # only report a salary at all when scraper/salary.py could also determine the
+        # period (hour/year/etc). Omitting the id key entirely (rather than sending
+        # null) avoids the same null-to-non-nullable-enum crash we hit with jobTypeId.
+        "salaryCompensation": _salary_compensation(job),
 
         "qualifications": {
             "isManagementRequired": job.get("is_management_required"),
