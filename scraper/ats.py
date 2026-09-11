@@ -38,6 +38,7 @@ async def _greenhouse(client: httpx.AsyncClient, company: Dict) -> List[Dict]:
             "url": j["absolute_url"],
             "raw_title": j["title"],
             "raw_company": company["name"],
+            "company_id": company.get("companyId"),
             "raw_location": j.get("location", {}).get("name"),
             "raw_description": j.get("content", "")[:2000],
         }
@@ -57,6 +58,7 @@ async def _lever(client: httpx.AsyncClient, company: Dict) -> List[Dict]:
             "url": j["hostedUrl"],
             "raw_title": j["text"],
             "raw_company": company["name"],
+            "company_id": company.get("companyId"),
             "raw_location": j.get("categories", {}).get("location"),
             "raw_description": j.get("descriptionPlain", "")[:2000],
         }
@@ -76,6 +78,7 @@ async def _smartrecruiters(client: httpx.AsyncClient, company: Dict) -> List[Dic
             "url": f"https://jobs.smartrecruiters.com/{slug}/{j['id']}",
             "raw_title": j["name"],
             "raw_company": company["name"],
+            "company_id": company.get("companyId"),
             "raw_location": j.get("location", {}).get("city"),
             "raw_description": "",
         }

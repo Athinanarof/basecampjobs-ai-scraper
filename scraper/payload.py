@@ -8,9 +8,12 @@ value are included. Fields that are neither required nor calculated yet
 preview readable — see PAYLOAD_MAPPING_TODO.md for the removed-fields list
 and what's needed before they can be added back.
 
-Company is intentionally not part of this payload — the target schema has
-no company field. It's known from whichever companies.json entry produced
-the job in the first place, not something that needs to travel through here.
+Company: sent as `companyId`, a real Company GUID from companies.json (see
+that file's `companyId` field). Requires the corresponding change on the
+basecampjobs-core side (ExternalJobViewModel.CompanyId / CreateFromExternalJobAsync)
+to actually be used — see PAYLOAD_MAPPING_TODO.md. Only present when
+companies.json has a companyId for that company; omitted otherwise so the
+backend behaves exactly as it does today for companies we haven't matched yet.
 """
 from typing import Dict
 import markdown as _markdown
@@ -71,7 +74,7 @@ def build_payload(job: Dict) -> Dict:
     job_type_id = JOB_TYPE_MAP.get(employment_type) or JOB_TYPE_MAP["other"]
     remote_status_id = REMOTE_STATUS_MAP.get(remote_status)
 
-    return {
+    payload = {
         "title": title,
 
         "jobTypeId": job_type_id,
@@ -111,3 +114,9 @@ def build_payload(job: Dict) -> Dict:
             "urlOrEmail": job.get("url"),
         },
     }
+
+    company_id = job.get("company_id")
+    if company_id:
+        payload["companyId"] = company_id
+
+    return payload

@@ -168,6 +168,7 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
                 "url": url,
                 "raw_title": getattr(metadata, "title", None) or (metadata.get("title", "") if isinstance(metadata, dict) else ""),
                 "raw_company": name,
+                "company_id": company.get("companyId"),
                 "raw_location": _location_from_jsonld(jobposting),
                 "raw_description": markdown,
                 "raw_employment_type": jobposting.get("employmentType"),
