@@ -18,9 +18,16 @@ def _base_url() -> str:
     return os.environ.get("BASECAMP_API_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
 
 
+def _verify_ssl() -> bool:
+    """Skip TLS verification only against a local dev server (self-signed cert from
+    `dotnet dev-certs`) — never for a real deployed environment."""
+    base = _base_url().lower()
+    return not ("localhost" in base or "127.0.0.1" in base)
+
+
 async def login() -> str:
     """Log in with BASECAMP_USERNAME/BASECAMP_PASSWORD and return a Bearer token."""
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=20, verify=_verify_ssl()) as client:
         resp = await client.post(
             f"{_base_url()}/Auth/login",
             json={
@@ -40,7 +47,7 @@ async def extract_skills(description: str) -> List[str]:
     survive SkillsRepository's exact-match lookup."""
     if not description:
         return []
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with httpx.AsyncClient(timeout=20, verify=_verify_ssl()) as client:
         resp = await client.post(
             f"{_base_url()}/Job/extract-skills-from-job-description",
             json={"jobDescription": description},
@@ -67,7 +74,7 @@ async def match_skills_batch(jobs: List[Dict], concurrency: int = 5) -> None:
 
 async def create_job(payload: dict, token: str) -> str:
     """POST a payload (see scraper/payload.py) to create-external-job. Returns the created job id."""
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=30, verify=_verify_ssl()) as client:
         resp = await client.post(
             f"{_base_url()}/Job/create-external-job",
             json=payload,
