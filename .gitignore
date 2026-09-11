@@ -222,3 +222,8 @@ local.settings.json
 jobs_output.json
 debug/
 DEPLOYMENT_NOTES.md
+
+# Azurite local storage emulator
+__azurite_db_*__.json
+__blobstorage__/
+__queuestorage__/
