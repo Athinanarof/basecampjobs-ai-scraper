@@ -15,8 +15,9 @@ to actually be used — see PAYLOAD_MAPPING_TODO.md. Only present when
 companies.json has a companyId for that company; omitted otherwise so the
 backend behaves exactly as it does today for companies we haven't matched yet.
 """
-from typing import Dict
+from typing import Dict, List
 import markdown as _markdown
+import pycountry
 
 # Basecamp's public enum JobType
 JOB_TYPE_MAP = {
@@ -72,6 +73,43 @@ def _salary_compensation(job: Dict) -> Dict:
     }
 
 
+def _country_code(name: str) -> Dict[str, str]:
+    """Basecamp's Country column is MaxLength(3) — a full name like "United
+    States" would get silently truncated to "Uni" by SQL Server. Resolve to a
+    real ISO code via pycountry; LongCountry (MaxLength 64) keeps the full name
+    regardless of whether the code lookup succeeds."""
+    if not name:
+        return {"country": None, "long_country": None}
+    try:
+        return {"country": pycountry.countries.lookup(name).alpha_2, "long_country": name}
+    except LookupError:
+        return {"country": None, "long_country": name}
+
+
+def _locations(job: Dict) -> List[Dict]:
+    # Only Firecrawl-sourced jobs (REI) currently carry structured city/region/country
+    # (from JSON-LD — see scraper/firecrawl.py). ATS sources (Greenhouse/Lever/
+    # SmartRecruiters) only give us a single free-text location string, not
+    # separate fields, so they get [] here for now.
+    struct = job.get("location_struct")
+    if not struct or not (struct.get("city") or struct.get("region")):
+        return []
+
+    country = _country_code(struct.get("country"))
+    return [{
+        "city": struct.get("city"),
+        "stateOrProvince": struct.get("region"),
+        "longStateOrProvince": struct.get("region"),
+        "country": country["country"],
+        "longCountry": country["long_country"],
+        # No lat/lng anywhere in the pipeline yet — 0/0 doesn't error server-side
+        # (GeolocationRepository builds the point unconditionally) but does place
+        # the pin at (0,0) ["Null Island"] until real geocoding is added.
+        "lat": 0,
+        "lng": 0,
+    }]
+
+
 def _description_html(text: str) -> str:
     """Render markdown/plain text into real HTML. Existing HTML (e.g. Greenhouse's
     content field) passes through mostly unchanged — python-markdown leaves
@@ -117,7 +155,7 @@ def build_payload(job: Dict) -> Dict:
         "description": _description_html(description),
 
         "additionalLocationInformation": location,
-        "locations": [],
+        "locations": _locations(job),
 
         # salaryCompensationId is non-nullable server-side and has no "unknown" value —
         # sending min/max without it shows as "undefined" in the UI (confirmed live), so

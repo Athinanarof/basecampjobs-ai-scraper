@@ -62,23 +62,41 @@ def _extract_jobposting_jsonld(html: str) -> Dict:
     return {}
 
 
-def _location_from_jsonld(jobposting: Dict) -> Optional[str]:
+def _address_from_jsonld(jobposting: Dict) -> Dict:
     # schema.org allows jobLocation to be either a single Place or an array of them
     # (REI posts some multi-site roles this way) — use the first entry either way.
     job_location = jobposting.get("jobLocation") or {}
     if isinstance(job_location, list):
         job_location = job_location[0] if job_location else {}
     if not isinstance(job_location, dict):
-        return None
+        return {}
 
     address = job_location.get("address") or {}
-    if not isinstance(address, dict):
-        return None
+    return address if isinstance(address, dict) else {}
+
+
+def _location_from_jsonld(jobposting: Dict) -> Optional[str]:
+    address = _address_from_jsonld(jobposting)
     city = address.get("addressLocality")
     region = address.get("addressRegion")
     if city and region:
         return f"{city}, {region}"
     return city or region
+
+
+def _location_struct_from_jsonld(jobposting: Dict) -> Optional[Dict]:
+    """Structured city/region/country for scraper/payload.py's locations[] array —
+    same address block as _location_from_jsonld, just kept as separate fields
+    instead of a single display string."""
+    address = _address_from_jsonld(jobposting)
+    city = address.get("addressLocality")
+    if not city and not address.get("addressRegion"):
+        return None
+    return {
+        "city": city,
+        "region": address.get("addressRegion"),
+        "country": address.get("addressCountry"),
+    }
 
 
 _client: Optional[FirecrawlApp] = None
@@ -170,6 +188,7 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
                 "raw_company": name,
                 "company_id": company.get("companyId"),
                 "raw_location": _location_from_jsonld(jobposting),
+                "location_struct": _location_struct_from_jsonld(jobposting),
                 "raw_description": markdown,
                 "raw_employment_type": jobposting.get("employmentType"),
                 "raw_valid_through": jobposting.get("validThrough"),

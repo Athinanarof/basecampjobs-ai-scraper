@@ -7,3 +7,4 @@ selectolax>=0.3.21
 openai>=1.51.0
 firecrawl-py>=1.0.0
 markdown>=3.6
+pycountry>=24.6.1
