@@ -40,11 +40,11 @@ async def _run():
     ats_companies       = [c for c in companies if c["ats"] in ("greenhouse", "lever", "smartrecruiters")]
     firecrawl_companies = [c for c in companies if c["ats"] == "firecrawl"]
 
-    # ATS APIs — free structured JSON
+    # ATS APIs, free structured JSON
     ats_jobs = await fetch_ats(ats_companies)
     logging.info(f"ATS APIs: {len(ats_jobs)} jobs")
 
-    # Firecrawl — handles any JS-rendered or custom career page
+    # Firecrawl, handles any JS-rendered or custom career page
     firecrawl_jobs = await fetch_firecrawl(firecrawl_companies)
     logging.info(f"Firecrawl: {len(firecrawl_jobs)} jobs")
 

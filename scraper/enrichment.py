@@ -78,7 +78,7 @@ def _enrich_batch(batch: List[Dict]) -> List[Dict]:
                 },
             ],
             response_format={"type": "json_object"},
-            # gpt-5-mini is a reasoning model — its hidden "thinking" tokens draw from this
+            # gpt-5-mini is a reasoning model, its hidden "thinking" tokens draw from this
             # same budget before any visible JSON output. 4096 could be entirely consumed by
             # reasoning alone on a full batch, leaving zero tokens for the actual answer
             # (finish_reason="length", empty content). Headroom needed for both.

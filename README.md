@@ -29,10 +29,10 @@ Daily timer (6am UTC)
 Before you start, make sure you have the following installed and ready.
 
 **Software**
-- [Python 3.11](https://www.python.org/downloads/) — check "Add Python to PATH" during install
+- [Python 3.11](https://www.python.org/downloads/) (check "Add Python to PATH" during install)
 - [VS Code](https://code.visualstudio.com/) with the [Azurite extension](https://marketplace.visualstudio.com/items?itemName=Azurite.azurite) installed
 
-**Accounts & API Keys — you will need all three**
+**Accounts & API Keys (you will need all three)**
 
 | Service | What it's for | Get it at |
 |---|---|---|
@@ -102,13 +102,13 @@ cp local.settings.json.example local.settings.json
 }
 ```
 
-> `local.settings.json` is in `.gitignore` — your keys will never be committed.
+> `local.settings.json` is in `.gitignore`, your keys will never be committed.
 
 **Where to find each key:**
 
 - `FIRECRAWL_API_KEY` → [firecrawl.dev](https://firecrawl.dev) → Dashboard → API Keys
 - `FIRECRAWL_JOBS_PER_COMPANY` → optional, defaults to `5`. Caps how many job
-  pages get scraped per Firecrawl company (REI, Backcountry) per run — raise
+  pages get scraped per Firecrawl company (REI, Backcountry) per run, raise
   it to pull more of each company's listings, at the cost of more Firecrawl
   credits and a longer run (`scraper/firecrawl.py` sleeps 7s between requests
   to stay under the free plan's rate limit).
@@ -117,7 +117,7 @@ cp local.settings.json.example local.settings.json
 - `AZURE_STORAGE_CONNECTION_STRING` → leave as-is for local development (Azurite handles it)
 - `BASECAMP_USERNAME` / `BASECAMP_PASSWORD` → credentials for a Basecamp
   account with the `Scrapping` role. Only needed for `--step push` (see
-  below) — every other step works without them.
+  below), every other step works without them.
 
 ---
 
@@ -132,7 +132,7 @@ You should see "Azurite Blob/Queue/Table service is starting" in the status bar.
 
 ### Test each step individually
 
-**Step 1 — ATS APIs** (free, no API keys needed)
+**Step 1: ATS APIs** (free, no API keys needed)
 ```powershell
 python run_local.py --step ats
 ```
@@ -140,7 +140,7 @@ Fetches jobs from Greenhouse, Lever, and SmartRecruiters for all companies in `c
 
 ---
 
-**Step 2 — Firecrawl** (needs `FIRECRAWL_API_KEY` and Azurite running — see above)
+**Step 2: Firecrawl** (needs `FIRECRAWL_API_KEY` and Azurite running, see above)
 ```powershell
 python run_local.py --step firecrawl
 ```
@@ -148,7 +148,7 @@ Scrapes career pages for companies marked `"ats": "firecrawl"` in `companies.jso
 
 ---
 
-**Step 3 — Enrichment** (needs `AZURE_OPENAI_API_KEY`)
+**Step 3: Enrichment** (needs `AZURE_OPENAI_API_KEY`)
 ```powershell
 python run_local.py --step enrich
 ```
@@ -158,21 +158,14 @@ Runs Azure OpenAI enrichment on sample job data. Confirms AI keys are working an
 
 ---
 
-**Step 4 — Push to Basecamp** (needs `BASECAMP_USERNAME`/`BASECAMP_PASSWORD`)
+**Step 4: Push to Basecamp** (needs `BASECAMP_USERNAME`/`BASECAMP_PASSWORD`)
 ```powershell
 python run_local.py --step push
 ```
-Sends everything currently in `jobs_output.json` to the real
-`create-external-job` API on `basecamp-develop` — this creates actual job
-listings, not a preview. Never runs automatically as part of `--step all`;
-you have to trigger it deliberately. Already-pushed URLs are tracked in
-`debug/pushed_urls.json` so re-running this is safe — it only pushes jobs
-it hasn't sent before.
-
-> **Known gap**: the real endpoint currently has no way to attach a
-> company to jobs created this way (`CompanyId` stays unset server-side —
-> see `PAYLOAD_MAPPING_TODO.md`). Pushed jobs will show up without a
-> linked company until that's fixed on the API side.
+Sends everything in `jobs_output.json` to the real `create-external-job` API
+on `basecamp-develop`, creating actual job listings, not a preview. Never
+runs as part of `--step all`; trigger it deliberately. Already-pushed URLs
+are tracked in `debug/pushed_urls.json`, so re-running this only pushes new jobs.
 
 ---
 
@@ -212,7 +205,7 @@ After adding a company, run `--step ats` or `--step firecrawl` to verify it work
 
 ```
 basecampjobs-ai-scraper/
-├── function_app.py          # Azure Functions Timer Trigger — entry point
+├── function_app.py          # Azure Functions Timer Trigger, entry point
 ├── companies.json           # List of outdoor industry companies to scrape
 ├── run_local.py             # Local test runner
 ├── requirements.txt         # Python dependencies
@@ -234,7 +227,7 @@ basecampjobs-ai-scraper/
         └── deploy.yml       # GitHub Actions → deploys to Azure on push to main
 ```
 
-> **Why `storage/cache.py` uses its own Table Storage instead of Basecamp's main database:** this dedup cache is a narrow, high-frequency, scraper-only concern (once per scraped URL per run) with no relevance to the rest of the platform. Keeping it here avoids adding a table/endpoint to `basecampjobs-core` (no coordination, no new auth surface) and stays fast — direct storage access instead of extra HTTP round-trips per URL. Cost stays effectively $0 either way.
+> **Why `storage/cache.py` uses its own Table Storage instead of Basecamp's main database:** it's a narrow, scraper-only concern with no relevance to the rest of the platform. Keeping it here avoids adding a table/endpoint to `basecampjobs-core` and stays fast, direct storage access instead of extra HTTP round-trips per URL. Cost stays effectively $0 either way.
 
 ---
 
@@ -249,23 +242,22 @@ basecampjobs-ai-scraper/
 
 Go to your Function App → Settings → Environment variables → add:
 - `FIRECRAWL_API_KEY`
-- `FIRECRAWL_JOBS_PER_COMPANY` — optional, defaults to `5`. See Configuration above.
+- `FIRECRAWL_JOBS_PER_COMPANY`, optional, defaults to `5`. See Configuration above.
 - `AZURE_OPENAI_API_KEY`
 - `AZURE_OPENAI_ENDPOINT`
 - `AZURE_OPENAI_DEPLOYMENT`
 - `AZURE_STORAGE_CONNECTION_STRING`
-- `BASECAMP_USERNAME` / `BASECAMP_PASSWORD` — a Basecamp account with the
-  `Scrapping` role. The nightly run publishes straight to Basecamp now
-  (`function_app.py`), not just to Azure Table Storage — without these it
-  fetches and enriches jobs but can't publish them.
-- `BASECAMP_API_BASE_URL` — optional, defaults to the `develop` environment.
+- `BASECAMP_USERNAME` / `BASECAMP_PASSWORD`, a Basecamp account with the
+  `Scrapping` role. Without these the nightly run still fetches and enriches
+  jobs but can't publish them.
+- `BASECAMP_API_BASE_URL`, optional, defaults to the `develop` environment.
 
 **3. Connect GitHub Actions**
 
 In Azure Portal → your Function App → Deployment Center → GitHub → authorize and select this repo.  
 Or add the publish profile as a secret `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` in your GitHub repo settings.
 
-Push to `main` — GitHub Actions deploys automatically.
+Push to `main`, GitHub Actions deploys automatically.
 
 ---
 
@@ -279,7 +271,7 @@ Push to `main` — GitHub Actions deploys automatically.
 | Firecrawl | Free (1,000 credits/month) → $16/month if over |
 | **Total** | **~$0.25–$17/month** |
 
-**Firecrawl credit breakdown — 1 credit = 1 page scraped (no multipliers).**
+**Firecrawl credit breakdown: 1 credit = 1 page scraped (no multipliers).**
 
 Each Firecrawl company uses:
 - 1 credit to map the career page and discover job URLs

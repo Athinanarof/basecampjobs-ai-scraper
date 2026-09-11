@@ -1,163 +1,98 @@
-# Mapping to the Basecamp Job API — open items
+# Mapping to the Basecamp Job API, open items
 
 `scraper/payload.py` (`build_payload()`) reshapes an enriched job into an
 API payload. `scraper/basecamp_client.py` (login + `create-external-job` +
 the shared `publish_payloads()` helper) is used by both:
-- `run_local.py --step push` — opt-in only, never runs as part of
+- `run_local.py --step push`, opt-in only, never runs as part of
   `--step all`, for local testing.
-- **`function_app.py`'s nightly run (as of 2026-08-19)** — publishes
-  outdoor-industry jobs to Basecamp automatically after enrichment, no
-  manual step. This was deliberately automated *before* the two known
-  gaps below were fixed (focus placeholder, missing CompanyId) — accepted
-  tradeoff to validate the integration on a real server run, not an
-  oversight.
+- `function_app.py`'s nightly run, publishes outdoor-industry jobs to
+  Basecamp automatically after enrichment, no manual step.
 
 Unresolved fields below are placeholders (`null` / `[]` / `false`).
 
-## Real endpoint details (found in `basecampjobs-core`, 2026-08-18)
-Checked the actual backend repo (`C:\Users\arace\Documents\Git\basecampjobs\basecampjobs-core`)
-against `https://basecamp-develop.azurewebsites.net/api`. Corrections to
-what we'd assumed:
-- The real endpoint is
-  **`POST https://basecamp-develop.azurewebsites.net/api/Job/create-external-job`**,
-  not `create-external-jobrequest`. Requires a Bearer token from a user
-  with the `Scrapping` role. Get a token via `POST /api/Auth/login` with
-  `{ "userName": "...", "password": "..." }`.
-- **`GET /api/Job/options/get`** (`[AllowAnonymous]`, no token needed) —
-  one-stop lookup endpoint. Returns the full `Skills` list, `Focuses`,
-  `Visions`, `JobFields`, `Leaderships`, and every enum (`JobTypes`,
-  `RemoteStatuses`, `SalaryCompensations`, `YearsOfExperience`, `Benefits`,
-  `OutdoorIndustries`) in one response.
-- `Focuses`, `Skills`, `Visions`, `AdditionalSkills` all expect
-  `{id, name}` pairs (`NameIdDto`), not just free-text names — confirms
-  the taxonomy-mismatch concern below is real: sending a name with no
-  matching `id` is not valid.
-- The real request model (`ExternalJobViewModel` / `DetailsViewModel`)
-  does include `jobTypeDuration`, `isHQPosition`, `isExclusiveToPlatform`,
-  `locationNonNegotiable` as real fields (we removed these from our local
-  preview as noise since we don't calculate them — still fine to leave
-  removed, just noting they're real fields on the actual endpoint, not
-  invented). Also found one field we didn't know about at all:
-  `howToApply.isDeadlinePublic` (bool).
+## Real endpoint details (found in `basecampjobs-core`)
+- Real endpoint: **`POST /api/Job/create-external-job`**. Requires a Bearer
+  token from a user with the `Scrapping` role, via `POST /api/Auth/login`
+  with `{ "userName": "...", "password": "..." }`.
+- **`GET /api/Job/options/get`** (anonymous) is a one-stop lookup: full
+  `Skills`, `Focuses`, `Visions`, `JobFields`, `Leaderships` lists, and
+  every enum (`JobTypes`, `RemoteStatuses`, `SalaryCompensations`,
+  `YearsOfExperience`, `Benefits`, `OutdoorIndustries`).
+- `Focuses`/`Skills`/`Visions`/`AdditionalSkills` on most endpoints expect
+  `{id, name}` pairs (`NameIdDto`). The external job endpoint is the
+  exception: `ExternalJobQualificationsViewModel` takes plain string
+  arrays, matched server-side by exact name.
+- `ExternalJobViewModel`/`DetailsViewModel` also has `jobTypeDuration`,
+  `isHQPosition`, `isExclusiveToPlatform`, `locationNonNegotiable`, and
+  `howToApply.isDeadlinePublic` as real fields, currently unused here (see
+  "Removed from the payload" below).
 
-## Skills — plan decided, use as-is for now
-- **`POST /api/Job/extract-skills-from-job-description`** (`[AllowAnonymous]`,
-  no token needed) — send `{ "jobDescription": "..." }`, get back Basecamp's
-  own matched `{id, name}` skills. Mechanism (from
-  `JobDescriptionSkillExtractor.cs`): loads all skills from their `Skills`
-  table (cached 6h), normalizes text and skill names (lowercase, strip
-  non-alphanumeric), then does **word-boundary exact-phrase matching**,
-  longest skill names first, deleting matched text as it goes so phrases
-  aren't double-counted. It's plain regex, not AI/embeddings — a skill only
-  matches if its literal name appears in the text. Feed it the fullest raw
-  description text we have (not the 800-char-truncated or AI-summarized
-  versions) to maximize matches.
-- **Decision**: use this endpoint as-is for now — it's free, deterministic,
-  IDs are guaranteed valid, and it's presumably the same mechanism
-  Basecamp's own platform uses internally. This replaces the need to send
-  our own AI-extracted skill strings at all.
-- **Later improvement**: since it's exact-phrase-only, it will miss
-  paraphrased/synonym skills our AI extracted but that aren't worded
-  exactly like Basecamp's skill names (e.g. our AI says "Product
-  Roadmapping", their list has "Product Management" — no match today).
-  Plan to add **local fuzzy string matching** as a second pass over
-  whatever the AI-extracted skill list contains but the exact-match
-  endpoint missed: compare each unmatched AI skill string against
-  Basecamp's full skill list (from `options/get`) using a similarity
-  algorithm like **Levenshtein distance** (edit distance — how many
-  character insertions/deletions/substitutions turn one string into the
-  other) via a local library (e.g. `rapidfuzz`), no extra API calls or AI
-  cost. Only counts as a match above some similarity threshold (TBD).
-  Note this only catches *textually* close variants (typos, word-order,
-  near-misses) — it won't catch true synonyms with no string overlap
-  (that would need AI, which we're deliberately avoiding for this — see
-  chat for the cost/hallucination tradeoffs of that approach).
+## Skills
+- **`POST /api/Job/extract-skills-from-job-description`** (anonymous):
+  send `{ "jobDescription": "..." }`, get back Basecamp's own matched
+  `{id, name}` skills. Server-side mechanism
+  (`JobDescriptionSkillExtractor.cs`): normalizes text and skill names,
+  then does word-boundary exact-phrase matching, longest names first,
+  deleting matched text as it goes. Plain regex, not AI/embeddings. We
+  feed it the fullest raw description text available to maximize matches.
+- Used as-is: free, deterministic, IDs guaranteed valid. Replaces sending
+  our own AI-extracted skill strings entirely.
+- **Later improvement**: exact-phrase-only means it misses paraphrased
+  skills (our AI says "Product Roadmapping", their list has "Product
+  Management", no match today). Could add local fuzzy matching
+  (e.g. `rapidfuzz`, Levenshtein distance) as a second pass over
+  AI-extracted skills the exact-match endpoint missed. Only catches
+  textually close variants, not true synonyms.
 
-## Locations — corrected, not a matching problem
-Earlier assumption was wrong — locations are **not** matched against a
-Basecamp lookup table like skills are. `LocationDto` is just
-`{Country, LongCountry, StateOrProvince, LongStateOrProvince, City, Lat,
-Lng}`, built fresh per job with no ID/lookup involved. The real gap: we
-don't currently produce `Lat`/`Lng` at all, so our scraped location
-strings (e.g. "Phoenix, Arizona") need geocoding before they can populate
-this shape. `locations` in `payload.py` is still `[]`.
+## Locations
+Not matched against a lookup table like skills/focuses. `LocationDto` is
+just `{Country, LongCountry, StateOrProvince, LongStateOrProvince, City,
+Lat, Lng}`, built fresh per job. Currently populated for Firecrawl-sourced
+jobs from JSON-LD (`scraper/firecrawl.py`); ATS sources still get `[]`.
+`Lat`/`Lng` are hardcoded `0` (no geocoding source yet).
 
-## Enums — resolved from source, no longer blocked
-Found the actual C# enum definitions in `basecampjobs-core`
-(`BasecampJobs.Common/Enums/`) — these don't need a Basecamp lookup call,
-the values are fixed and already known:
+## Enums
+Fixed values from `basecampjobs-core`'s `BasecampJobs.Common/Enums/`, no
+lookup call needed:
 - `SalaryCompensation`: Yearly=1, Hour=2, Week=3, Month=4,
-  ContractLength=5, Day=6
+  ContractLength=5, Day=6 (wired into `payload.py`)
 - `YearsOfExperience`: EntryLevel=1, From1Years=2, From3Years=3,
-  From5Years=4, From10Years=5, From20Years=6
-- `Benefit` (19 values, e.g. Medical=1, Vacation=2, ParentalLeave=3 ... up
-  to RemoteWork=19 — full list in `BasecampJobs.Common/Enums/Benefit.cs`)
+  From5Years=4, From10Years=5, From20Years=6 (not wired in yet)
+- `Benefit` (19 values, e.g. Medical=1, Vacation=2, ParentalLeave=3, up to
+  RemoteWork=19; full list in `BasecampJobs.Common/Enums/Benefit.cs`, not
+  wired in yet)
 
-Still need: wire these into `payload.py` as maps (same pattern as
-`JOB_TYPE_MAP`/`REMOTE_STATUS_MAP`), and have `enrichment.py` extract the
-signal needed to pick a value (years-of-experience mentions, benefits
-mentioned in the posting).
+Still need: `YearsOfExperience`/`Benefit` maps in `payload.py`, and
+`enrichment.py` extracting the signal to pick a value.
 
-## API integration — built and tested live; wrong payload shape fixed, one real blocker remains
-`scraper/basecamp_client.py` (`login()`, `create_job()`) + `run_local.py
---step push` call the real API: logs in once, POSTs each job from
-`jobs_output.json` to `create-external-job`, tracks already-pushed URLs in
-`debug/pushed_urls.json` so re-running is safe. Login confirmed working
-live (2026-08-18) with real credentials.
+## API integration
+`scraper/basecamp_client.py` (`login()`, `create_job()`, `publish_payloads()`)
++ `run_local.py --step push` / `function_app.py`'s nightly run call the
+real API, tracking already-pushed URLs (`debug/pushed_urls.json` locally,
+Table Storage in production) so re-runs are safe.
 
-**Fixed on our side**: `salaryCompensation.min`/`max` now default to `0`
-instead of `null` — confirmed live that `0` passes validation (`min`/`max`
-are non-nullable `decimal` server-side).
+**Confirmed bug on `develop`, not ours to fix**: unconditional `.First()`
+on `Focuses` in `JobService.cs:360`
+(`job.Qualifications.JobFieldId = await _focusRepository.GetJobFieldId(model.Focuses.First().Id);`),
+no null/empty check. An empty `focuses` array crashes with `500`
+("Sequence contains no elements"). We work around it client-side:
+`payload.py`'s `PLACEHOLDER_FOCUS` ("Data", a real focus name) is sent
+only when real focus matching comes back empty. `"Other"` is not a valid
+substitute, it doesn't exist in the real Focuses table.
 
-**CORRECTION (2026-08-19)**: the "positional deserialization bug" theory
-below was wrong. Root cause: `scraper/payload.py` was sending
-`qualifications.focuses`/`skills` as `[{"name": "..."}]` objects, matching
-the old `UpdateQualificationsViewModel` (`IList<NameIdDto>`). The real
-model for this endpoint is `ExternalJobQualificationsViewModel`
-(`BasecampJobs.Common/ViewModels/Job/Post/ExternalJobQualificationsViewModel.cs`),
-which expects **plain string arrays** — `["Outdoor Retail"]`, not
-`[{"name": "Outdoor Retail"}]`. That's why the parser choked on `{`. This
-file only exists on the `develop` branch (added 2026-07-22, commit
-`a890a7f9` "scrapping updates") — the investigation that produced the
-"positional" theory was done against a local checkout still on `main`,
-which never had this file, so the mismatch wasn't visible from the code.
-Fixed in `payload.py`: `focuses`/`skills` now send plain strings.
+**Also confirmed**: focus/skill/vision matching does exact string
+matching server-side; a name with no matching row is silently dropped,
+not created.
 
-**Still a real, confirmed bug on `develop`**: unconditional `.First()` on
-`Focuses` — `JobService.cs:360` —
-`job.Qualifications.JobFieldId = await _focusRepository.GetJobFieldId(model.Focuses.First().Id);`
-— no null/empty check. If `focuses` ends up empty, this crashes with `500`
-/ `"Sequence contains no elements"`.
-
-**Also confirmed**: `FocusRepository.MapCollection()` (and presumably the
-equivalent for skills/visions/benefits/outdoor industries) does **exact
-string matching** against their own DB tables (`Where(f =>
-incoming.Contains(f.Name))`) — a name that doesn't exactly match an
-existing row is silently dropped, not created. So our AI-generated `field`
-taxonomy won't reliably match Basecamp's real focus names, and could
-regularly end up empty — which would then hit the `.First()` crash above.
-Need real name-matching against `GET /api/Job/options/get`'s `Focuses`
-list before this is trustworthy (same problem already tracked for skills
-elsewhere in this doc).
-
-**Known blocker, also found while building this**: `CreateFromExternalJobAsync`
-(`JobService.cs`) never sets `job.CompanyId` — it's nullable and stays
-`null` for every job created this way, since `ExternalJobViewModel` has no
-company field for it to come from and the method doesn't derive it from
-the logged-in user's company. Endpoint won't reject the request on its
-own for this (field is optional) — separate issue from the blocker above.
-
-## Removed from the payload — revisit once resolved
-These fields were dropped from `build_payload()`'s output entirely (not
-just left null) because they're neither required nor have a calculated
-value — they were pure noise. Once any of them gets a real data source or
-lookup table, add it back:
+## Removed from the payload, revisit once resolved
+Dropped from `build_payload()`'s output entirely (not left null) because
+they're neither required nor have a calculated value. Add back once each
+gets a real data source:
 - `jobTypeDuration`
 - `isHQPosition`
 - `isExclusiveToPlatform`
 - `locationNonNegotiable`
 - `remoteLocations`
-- `salaryCompensation.salaryCompensationId`
 - `qualifications.yearsOfExperienceId`
 - `qualifications.superpowersSuggestions`
 - `qualifications.benefits`
@@ -167,39 +102,16 @@ lookup table, add it back:
 - `howToApply.applicationDeadline`
 - `howToApply.notes`
 
-## No data source yet — need a decision on where the value comes from
-- `howToApply.contact` (name/email/title/linkedIn) — not present in scraped
-  postings. Likely needs to live in `companies.json` as per-company config
-  rather than being AI-derived.
-- `howToApply.applicationDeadline` — not scraped from ATS APIs. **Partial
-  source exists for Firecrawl companies**: REI's job pages embed a
-  schema.org `JobPosting` JSON-LD block with a real `validThrough` date
-  (confirmed live). `scraper/firecrawl.py` extracts it into
-  `raw_valid_through`, but it isn't wired into `payload.py` yet — still
-  need to decide whether `validThrough` really means "application
-  deadline" or just "listing expiry" before treating it as one.
-- `qualifications.visions` (e.g. "Diversity") — same `{id, name}` shape as
-  skills/focuses now confirmed, but still no data source — nothing extracts
-  candidate vision values from postings yet.
-- `qualifications.additionalSkills` — unclear how this differs from
-  `qualifications.skills`. Same taxonomy, different bucket? Need an example.
-- `isHQPosition` — hardcoded `false`, no data source.
-
-## Taxonomy mismatch
-- `qualifications.focuses` — **PLACEHOLDER as of 2026-08-19**: hardcoded to
-  `["Data"]` (`PLACEHOLDER_FOCUS` in `payload.py`) for every job, regardless
-  of content. This was previously populated from our AI's `field` value
-  (e.g. "Ski/Snow", "Outdoor Retail") — confirmed wrong via live testing:
-  `field` is an industry taxonomy, Basecamp's real `Focuses` list (`GET
-  /api/Job/options/get`, 278 entries) is job-function names ("Account
-  Management", "Business Development") — a different dimension entirely,
-  so `field` never matched. `focuses` can't be empty either — `JobService.cs:360`
-  crashes with `500` (`"Sequence contains no elements"`) on an empty list,
-  confirmed via 10 live push failures. `"Data"` was picked only because
-  it's a real, confirmed exact-match placeholder that unblocks pushing —
-  it is **not a real focus for any of these jobs**. Real fix: classify
-  against the actual 278-entry list during enrichment, same approach
-  needed for skills (though skills has Basecamp's own extraction endpoint
-  to lean on; focuses has no equivalent, would need our own AI matching
-  against the fetched list).
-- `niche` (our field) has no home in the target payload at all — dropped.
+## No data source yet
+- `howToApply.contact` (name/email/title/linkedIn): not present in scraped
+  postings. Likely needs to live in `companies.json` as per-company config.
+- `howToApply.applicationDeadline`: not scraped from ATS APIs. REI's
+  Firecrawl pages embed a real `validThrough` date via schema.org
+  JSON-LD (`raw_valid_through`), but it isn't wired into `payload.py` yet.
+  Still need to decide whether `validThrough` means "application deadline"
+  or just "listing expiry".
+- `qualifications.visions` (e.g. "Diversity"): same shape as skills/focuses
+  now, but nothing extracts candidate values from postings yet.
+- `qualifications.additionalSkills`: unclear how this differs from
+  `qualifications.skills`. Need an example.
+- `isHQPosition`: hardcoded `false`, no data source.

@@ -1,5 +1,5 @@
 """
-Client for the real Basecamp Jobs API — the actual create-external-job
+Client for the real Basecamp Jobs API, the actual create-external-job
 endpoint, not the local payload preview in scraper/payload.py.
 
 Requires BASECAMP_USERNAME / BASECAMP_PASSWORD (a Scrapping-role account)
@@ -20,7 +20,7 @@ def _base_url() -> str:
 
 def _verify_ssl() -> bool:
     """Skip TLS verification only against a local dev server (self-signed cert from
-    `dotnet dev-certs`) — never for a real deployed environment."""
+    `dotnet dev-certs`), never for a real deployed environment."""
     base = _base_url().lower()
     return not ("localhost" in base or "127.0.0.1" in base)
 
@@ -42,7 +42,7 @@ async def login() -> str:
 async def extract_skills(description: str) -> List[str]:
     """Match raw job description text against Basecamp's own Skills table
     (exact-phrase, server-side, no auth needed). Names returned here are
-    guaranteed to exist in their Skills table — use these for
+    guaranteed to exist in their Skills table. Use these for
     qualifications.skills instead of AI-guessed names, which mostly won't
     survive SkillsRepository's exact-match lookup."""
     if not description:
@@ -131,12 +131,12 @@ async def publish_payloads(
     create-external-job, one at a time, isolating failures per job so one bad
     payload doesn't abort the rest of the batch.
 
-    Returns one result dict per payload: {"url", "title", "job_id", "error"} —
+    Returns one result dict per payload: {"url", "title", "job_id", "error"}.
     job_id is set on success, error is set (job_id is None) on failure. Shared by
     run_local.py's --step push and function_app.py's nightly run, so callers own
     what happens with each result (console output + local dedup file vs. Azure
     logging + Table Storage dedup) via the optional on_result callback, called
-    once per payload as results come in — not just at the end — so a caller can
+    once per payload as results come in, not just at the end, so a caller can
     persist progress incrementally instead of losing it all if something later
     in the batch goes wrong.
     """

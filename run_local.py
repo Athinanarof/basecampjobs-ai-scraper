@@ -1,5 +1,5 @@
 """
-Local test runner — simulates the full Azure Function pipeline.
+Local test runner, simulates the full Azure Function pipeline.
 Run with: python run_local.py
 
 Flags:
@@ -7,7 +7,7 @@ Flags:
   --step firecrawl    scrape Firecrawl companies (needs FIRECRAWL_API_KEY and Azurite running)
   --step enrich       run enrichment against sample data (needs AZURE_OPENAI_API_KEY)
   --step push         push jobs_output.json to the real Basecamp API (needs
-                       BASECAMP_USERNAME/BASECAMP_PASSWORD) — creates real jobs
+                       BASECAMP_USERNAME/BASECAMP_PASSWORD), creates real jobs
                        on basecamp-develop. Never runs as part of --step all.
   --step all          run everything end-to-end except push (default)
 """
@@ -20,7 +20,7 @@ import sys
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
-# ── Local test limits — change these to control pipeline scale ──────────────
+# Local test limits, change these to control pipeline scale
 # Set any value to None to remove that cap.
 DEBUG_LIMITS = {
     "ats": 5,       # max jobs kept from ATS APIs
@@ -64,7 +64,7 @@ def save_debug(step: str, jobs: list, as_payload: bool = False):
     """Write per-step snapshot to debug/<step>.json for easy inspection.
 
     as_payload=True reshapes each job into the create-external-jobrequest
-    payload shape (see scraper/payload.py) instead of writing raw fields —
+    payload shape (see scraper/payload.py) instead of writing raw fields,
     only meaningful once enrichment has run.
     """
     os.makedirs(DEBUG_DIR, exist_ok=True)
@@ -84,7 +84,7 @@ def _cap(jobs: list, limit_key: str) -> list:
 
 
 def save_local(jobs):
-    """Upsert payload-shaped jobs by URL — updates existing records instead of skipping them.
+    """Upsert payload-shaped jobs by URL, updates existing records instead of skipping them.
 
     Writes the create-external-jobrequest payload shape (scraper/payload.py),
     keyed on howToApply.urlOrEmail since the payload itself has no top-level
@@ -134,7 +134,7 @@ def _mark_pushed(pushed: set):
 
 async def run_push():
     """Push jobs_output.json to the real Basecamp API. Creates real jobs on
-    basecamp-develop — only run this deliberately, never as part of --step all.
+    basecamp-develop, only run this deliberately, never as part of --step all.
 
     Tracks already-pushed URLs in debug/pushed_urls.json so re-running this
     doesn't create duplicate live listings.

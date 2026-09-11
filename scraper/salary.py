@@ -2,12 +2,12 @@
 Local, non-AI salary extraction.
 
 Pay-transparency disclosures are frequently placed near the bottom of a
-posting rather than up top (confirmed against real REI postings — salary
+posting rather than up top (confirmed against real REI postings, salary
 text landed between char 4,000-4,900 in every sample checked), well past
 the 800-char window sent to the LLM in enrichment.py. Rather than paying
 to send full descriptions to the model just to catch a dollar figure, this
 runs a plain regex pass over the untruncated raw_description before/instead
-of asking the AI — zero token cost, deterministic.
+of asking the AI. Zero token cost, deterministic.
 """
 import re
 from typing import Dict, Optional
@@ -21,7 +21,7 @@ _RANGE_RE = re.compile(rf"{_AMOUNT}\s*(?:-|–|—|to)\s*{_AMOUNT}(?:\s*{_UNIT})
 # "$17.84/hr", "$50,000 per year"
 _SINGLE_UNIT_RE = re.compile(rf"{_AMOUNT}\s*{_UNIT}", re.IGNORECASE)
 
-# "Salary: $95,000", "Base pay - $22.50" — keyword-gated so a bare dollar
+# "Salary: $95,000", "Base pay - $22.50". Keyword-gated so a bare dollar
 # figure elsewhere in the posting (e.g. a revenue number) isn't mistaken for pay.
 _KEYWORD_SINGLE_RE = re.compile(
     rf"(?:salary|compensation|base\s*pay|pay\s*rate)[^\n$]{{0,40}}{_AMOUNT}",
@@ -29,7 +29,7 @@ _KEYWORD_SINGLE_RE = re.compile(
 )
 
 # Normalizes whatever word the regex caught to Basecamp's own SalaryCompensation
-# enum keys (see JOB_TYPE_MAP-style maps in scraper/payload.py) — kept as plain
+# enum keys (see JOB_TYPE_MAP-style maps in scraper/payload.py). Kept as plain
 # strings here so this module stays free of any Basecamp-specific knowledge.
 _UNIT_TO_PERIOD = {
     "hour": "hour", "hr": "hour",
@@ -80,7 +80,7 @@ def extract_salary(text: str) -> Dict[str, Optional[object]]:
             "salary_range": match.group(0).strip(),
             "salary_min": value,
             "salary_max": value,
-            "salary_period": None,  # no unit in this pattern — e.g. "Salary: $95,000"
+            "salary_period": None,  # no unit in this pattern, e.g. "Salary: $95,000"
         }
 
     return empty

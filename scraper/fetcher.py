@@ -11,7 +11,7 @@ HEADERS = {
     )
 }
 
-# CSS selectors per ATS platform — avoids generic text dumps for known layouts
+# CSS selectors per ATS platform, avoids generic text dumps for known layouts
 ATS_SELECTORS: Dict[str, Dict[str, str]] = {
     "greenhouse.io": {
         "title": "h1.app-title",

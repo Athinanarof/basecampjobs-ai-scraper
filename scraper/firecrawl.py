@@ -64,7 +64,7 @@ def _extract_jobposting_jsonld(html: str) -> Dict:
 
 def _address_from_jsonld(jobposting: Dict) -> Dict:
     # schema.org allows jobLocation to be either a single Place or an array of them
-    # (REI posts some multi-site roles this way) — use the first entry either way.
+    # (REI posts some multi-site roles this way). Use the first entry either way.
     job_location = jobposting.get("jobLocation") or {}
     if isinstance(job_location, list):
         job_location = job_location[0] if job_location else {}
@@ -85,8 +85,8 @@ def _location_from_jsonld(jobposting: Dict) -> Optional[str]:
 
 
 def _location_struct_from_jsonld(jobposting: Dict) -> Optional[Dict]:
-    """Structured city/region/country for scraper/payload.py's locations[] array —
-    same address block as _location_from_jsonld, just kept as separate fields
+    """Structured city/region/country for scraper/payload.py's locations[] array.
+    Same address block as _location_from_jsonld, just kept as separate fields
     instead of a single display string."""
     address = _address_from_jsonld(jobposting)
     city = address.get("addressLocality")
@@ -110,7 +110,7 @@ def _get_client() -> FirecrawlApp:
 
 
 def _jobs_per_company_cap() -> int:
-    """How many job pages to scrape per Firecrawl company per run. Optional —
+    """How many job pages to scrape per Firecrawl company per run. Optional,
     defaults to 5. Raise this to scrape more of each company's listings, at
     the cost of more Firecrawl credits and a longer run (7s sleep/request)."""
     return int(os.environ.get("FIRECRAWL_JOBS_PER_COMPANY", "5"))
@@ -158,11 +158,11 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
         return []
 
     # Step 2: Scrape each job page, capped per company per run via
-    # FIRECRAWL_JOBS_PER_COMPANY (defaults to 5 — see local.settings.json.example).
+    # FIRECRAWL_JOBS_PER_COMPANY (defaults to 5, see local.settings.json.example).
     # Only spends credits on URLs not already in the dedup cache, so scraping
     # walks forward through a company's listings over time instead of
     # re-scraping the same already-known pages every run.
-    # Free plan: 10 req/min — sleep 7s between requests to stay under limit
+    # Free plan: 10 req/min, sleep 7s between requests to stay under limit
     import time
     jobs = []
     for url in new_urls[:_jobs_per_company_cap()]:
@@ -171,7 +171,7 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
             raw_md = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
             markdown = _clean_markdown(raw_md)
             metadata = result.metadata if hasattr(result, "metadata") else result.get("metadata", {})
-            # rawHtml (not "html") — Firecrawl's "html" format is cleaned/sanitized and strips
+            # rawHtml (not "html"). Firecrawl's "html" format is cleaned/sanitized and strips
             # <script> tags, which drops the JobPosting JSON-LD block we need below.
             # SDK attribute is snake_case (raw_html) even though the API request format is "rawHtml".
             html = getattr(result, "raw_html", None) or (result.get("rawHtml", "") if isinstance(result, dict) else "")
