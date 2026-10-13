@@ -73,14 +73,32 @@ async def _smartrecruiters(client: httpx.AsyncClient, company: Dict) -> List[Dic
         params={"limit": 100},
     )
     resp.raise_for_status()
-    return [
-        {
-            "url": f"https://jobs.smartrecruiters.com/{slug}/{j['id']}",
+    postings = resp.json().get("content", [])
+
+    jobs = []
+    for j in postings:
+        posting_id = j["id"]
+        jobs.append({
+            "url": f"https://jobs.smartrecruiters.com/{slug}/{posting_id}",
             "raw_title": j["name"],
             "raw_company": company["name"],
             "company_id": company.get("companyId"),
             "raw_location": j.get("location", {}).get("city"),
-            "raw_description": "",
-        }
-        for j in resp.json().get("content", [])
-    ]
+            "raw_description": await _smartrecruiters_description(client, slug, posting_id, company["name"]),
+        })
+    return jobs
+
+
+async def _smartrecruiters_description(client: httpx.AsyncClient, slug: str, posting_id: str, company_name: str) -> str:
+    """The postings list endpoint only returns metadata (title, location, etc.),
+    no description — that only comes back from the single-posting endpoint, under
+    jobAd.sections.{companyDescription,jobDescription,qualifications,additionalInformation}.
+    Each section's `text` is already HTML."""
+    try:
+        resp = await client.get(f"https://api.smartrecruiters.com/v1/companies/{slug}/postings/{posting_id}")
+        resp.raise_for_status()
+        sections = resp.json().get("jobAd", {}).get("sections", {})
+        return "".join(section.get("text", "") for section in sections.values() if section.get("text"))
+    except Exception as e:
+        logging.warning(f"{company_name}: posting detail fetch failed for {posting_id}: {e}")
+        return ""

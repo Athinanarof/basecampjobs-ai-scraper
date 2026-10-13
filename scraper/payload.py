@@ -138,6 +138,11 @@ def build_payload(job: Dict) -> Dict:
     # when we can't resolve a real value, rather than sending null (which the whole
     # request gets rejected for).
     job_type_id = JOB_TYPE_MAP.get(employment_type) or JOB_TYPE_MAP["other"]
+    # remoteStatusId is non-nullable server-side too, but unlike jobTypeId has no "other"/
+    # "unknown" value to fall back to (RemoteStatus.cs only defines 1-5). Sending null
+    # crashes the whole request (confirmed: DetailsViewModel.RemoteStatusId can't deserialize
+    # null into the enum), so omit the key entirely when we can't resolve one, same fix as
+    # salaryCompensationId below.
     remote_status_id = REMOTE_STATUS_MAP.get(remote_status)
 
     payload = {
@@ -147,7 +152,6 @@ def build_payload(job: Dict) -> Dict:
         # Only carry the raw text when we couldn't map it (or it's genuinely "other"), otherwise jobTypeId already says it.
         "jobTypeOther": employment_type if (employment_type not in JOB_TYPE_MAP or job_type_id == JOB_TYPE_MAP["other"]) else None,
 
-        "remoteStatusId": remote_status_id,
         "isRemoteConsidered": job.get("is_remote_considered") or False,
         "isHousingIncluded": job.get("is_housing_included") or False,
         "isHousingSubsidized": job.get("is_housing_subsidized") or False,
@@ -180,6 +184,9 @@ def build_payload(job: Dict) -> Dict:
             "urlOrEmail": job.get("url"),
         },
     }
+
+    if remote_status_id is not None:
+        payload["remoteStatusId"] = remote_status_id
 
     company_id = job.get("company_id")
     if company_id:

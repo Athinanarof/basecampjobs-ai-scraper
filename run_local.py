@@ -23,9 +23,9 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 # Local test limits, change these to control pipeline scale
 # Set any value to None to remove that cap.
 DEBUG_LIMITS = {
-    "ats": 5,       # max jobs kept from ATS APIs
-    "firecrawl": 5, # max jobs kept from Firecrawl (also capped inside firecrawl.py)
-    "enrich": 10,   # max jobs sent to enrichment in the full pipeline
+    "ats": None,       # max jobs kept from ATS APIs
+    "firecrawl": None, # max jobs kept from Firecrawl (also capped inside firecrawl.py)
+    "enrich": None,    # max jobs sent to enrichment in the full pipeline
 }
 
 

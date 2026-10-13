@@ -8,8 +8,6 @@
   {"name": "Hydro Flask",     "ats": "greenhouse",      "slug": "hydroflask"},
   {"name": "Norrona",         "ats": "greenhouse",      "slug": "norrona"},
   {"name": "REI",             "ats": "firecrawl",       "url": "https://rei.jobs/jobs",                                  "companyId": "B62C4A3A-86D6-40F8-B02C-3421C855F5D9"},
-  {"name": "Patagonia",       "ats": "firecrawl",       "url": "https://www.patagonia.com/careers/",                     "companyId": "8500C043-6008-4AC5-D749-08DB0E33193D"},
-  {"name": "The North Face",  "ats": "firecrawl",       "url": "https://www.thenorthface.com/en-us/about-us/careers",    "companyId": "B76CEABA-A6FE-4B09-807C-AAC044D0B4C9"},
-  {"name": "VF Corporation",  "ats": "firecrawl",       "url": "https://vfc.wd5.myworkdayjobs.com/vfc_careers",          "companyId": "E6504016-7C91-40F8-8B85-8B23A03F41E6"},
-  {"name": "Vail Resorts",    "ats": "firecrawl",       "url": "https://jobs.vailresortscareers.com/",                   "companyId": "2F070700-4045-4AC3-9224-F3A6E8682173"}
+  {"name": "Patagonia",       "ats": "firecrawl",       "url": "https://www.patagonia.com/jobs-at-patagonia/",           "companyId": "8500C043-6008-4AC5-D749-08DB0E33193D"},
+  {"name": "Cotopaxy",        "ats": "firecrawl",       "url": "https://www.cotopaxi.com/pages/jobs",    "companyId": "F0DA2CAA-7853-45D0-A141-08DB0EA3E870"}
 ]
