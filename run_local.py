@@ -10,6 +10,10 @@ Flags:
                        BASECAMP_USERNAME/BASECAMP_PASSWORD), creates real jobs
                        on basecamp-develop. Never runs as part of --step all.
   --step all          run everything end-to-end except push (default)
+  --skip-ats          with --step all, skip the ATS fetch (Firecrawl + enrich only)
+
+Only --step all (the default) writes jobs_output.json. The other steps only
+write debug/step_N_*.json snapshots.
 """
 
 import asyncio
@@ -268,7 +272,7 @@ async def run_enrich(jobs=None):
     return enriched
 
 
-async def run_all():
+async def run_all(skip_ats: bool = False):
     companies = load_companies()
     ats_companies = [c for c in companies if c["ats"] in ("greenhouse", "lever", "smartrecruiters")]
     fc_companies  = [c for c in companies if c["ats"] == "firecrawl"]
@@ -276,10 +280,14 @@ async def run_all():
     print("\n=== FULL PIPELINE ===")
     print(f"DEBUG_LIMITS: {DEBUG_LIMITS}\n")
 
-    ats_jobs = await fetch_ats(ats_companies)
-    ats_jobs = _cap(ats_jobs, "ats")
-    print(f"[1/4] ATS APIs:    {len(ats_jobs)} jobs")
-    save_debug("step_1_ats", ats_jobs)
+    if skip_ats:
+        ats_jobs = []
+        print("[1/4] ATS APIs:    skipped (--skip-ats)")
+    else:
+        ats_jobs = await fetch_ats(ats_companies)
+        ats_jobs = _cap(ats_jobs, "ats")
+        print(f"[1/4] ATS APIs:    {len(ats_jobs)} jobs")
+        save_debug("step_1_ats", ats_jobs)
 
     fc_jobs = await fetch_firecrawl(fc_companies)
     fc_jobs = _cap(fc_jobs, "firecrawl")
@@ -317,4 +325,4 @@ if __name__ == "__main__":
     elif step == "push":
         asyncio.run(run_push())
     else:
-        asyncio.run(run_all())
+        asyncio.run(run_all(skip_ats="--skip-ats" in sys.argv))
