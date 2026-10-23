@@ -47,8 +47,10 @@ _WORKDAY_METADATA_LINE = re.compile(
 # JazzHR's "Job Title: / Job Level: / ..." recap block. It's typed into the
 # employer's own description text, not a separate container, so no exclude_tags
 # selector catches it — filtered here by its fixed label prefix instead.
+# "Job Compensation:" is kept: it's the only place JazzHR postings state pay,
+# and scraper/salary.py reads it from raw_description.
 _JAZZHR_METADATA_LINE = re.compile(
-    r"^(Job Title|Job Level|Job Type|Job Location|Job Compensation):"
+    r"^(Job Title|Job Level|Job Type|Job Location):"
 )
 
 
