@@ -19,9 +19,12 @@ from typing import Dict, List, NamedTuple, Optional
 
 _NUMBER = r"(\d[\d,]*(?:\.\d+)?)\s*([kK])?"
 _AMOUNT = rf"\$\s*{_NUMBER}"
-# Only the second amount of a range may omit the "$" ("$65-70k"); requiring it
-# on the first keeps "3-5 years" from reading as pay.
-_AMOUNT_OPTIONAL_SIGN = rf"\$?\s*{_NUMBER}"
+# The second amount of a range may omit the "$" only when a "k" or a unit
+# follows ("$65-70k", "$20 - 25 per hour"), so "$95,000 - 2 openings" isn't a range.
+_AMOUNT_OPTIONAL_SIGN = (
+    rf"(?:\$|(?=\d[\d,]*(?:\.\d+)?\s*(?:[kK]\b|(?:USD\s*)?(?:/|per\s|an?\s|hourly|annual|yearly|weekly|monthly|daily))))"
+    rf"\s*{_NUMBER}"
+)
 _RANGE_SEP = r"\s*(?:-|–|—|to)\s*"
 _UNIT = (
     r"(?:\s*USD)?\s*(?:"
@@ -39,8 +42,9 @@ _SINGLE_UNIT_RE = re.compile(rf"{_AMOUNT}{_UNIT}", re.IGNORECASE)
 # "$95,000" with no unit. Only used when a pay label precedes it.
 _BARE_RE = re.compile(_AMOUNT, re.IGNORECASE)
 
-# "$5-$30 million" is never pay.
-_MAGNITUDE_AFTER_RE = re.compile(r"\s*(?:million|billion|mil|mm|bn|m|b)\b", re.IGNORECASE)
+# "$5-$30 million", "$5M" are never pay. A lone "M"/"B" must be attached to the
+# number, so "$20/hr M-F" isn't read as millions.
+_MAGNITUDE_AFTER_RE = re.compile(r"(?:\s*(?:million|billion|mil|mm|bn)|[mb])\b", re.IGNORECASE)
 
 # Dollar figures that aren't base pay: bonuses, stipends, store revenue, etc.
 _NON_PAY_CONTEXT_RE = re.compile(
@@ -58,8 +62,7 @@ _PAY_LABEL_RE = re.compile(
     r"pay\s*range|pay\s*rate|pay\s*scale|base\s*pay|rate\s+of\s+pay|"
     r"starting\s+(?:pay|wage|rate|salary)|hourly\s+(?:rate|pay|wage)|"
     r"wage\s*range|wages?|hiring\s+range|"
-    r"ote|on[-\s]target\s+earnings|"
-    r"pay"
+    r"ote|on[-\s]target\s+earnings"
     r")\b",
     re.IGNORECASE,
 )
@@ -126,7 +129,7 @@ def _label_before(text: str, start: int) -> Optional[re.Match]:
 
 
 def _label_period_hint(text: str, label: re.Match, start: int) -> Optional[str]:
-    context = text[text.rfind("\n", 0, label.start()) + 1:start]
+    context = text[label.start():start]
     if _HOURLY_HINT_RE.search(context):
         return "hour"
     if _YEARLY_HINT_RE.search(context):
@@ -177,15 +180,21 @@ def _collect(text: str) -> List[_Candidate]:
 
 
 def _pick(text: str, candidates: List[_Candidate]) -> Optional[_Candidate]:
-    labeled = [c for c in candidates if c.labeled]
-    if labeled:
-        return min(labeled, key=lambda c: (c.kind, c.start))
-
-    unlabeled = [
-        c for c in candidates
-        if c.kind != _BARE and not _NON_PAY_CONTEXT_RE.search(_sentence_around(text, c.start, c.end))
-    ]
-    return min(unlabeled, key=lambda c: (c.kind, c.start)) if unlabeled else None
+    """Labeled range/unit figure, else unlabeled range/unit figure outside
+    bonus/stipend talk, else labeled bare figure ("Salary: $95,000")."""
+    tiers = (
+        [c for c in candidates if c.labeled and c.kind != _BARE],
+        [
+            c for c in candidates
+            if not c.labeled and c.kind != _BARE
+            and not _NON_PAY_CONTEXT_RE.search(_sentence_around(text, c.start, c.end))
+        ],
+        [c for c in candidates if c.labeled and c.kind == _BARE],
+    )
+    for tier in tiers:
+        if tier:
+            return min(tier, key=lambda c: (c.kind, c.start))
+    return None
 
 
 def _infer_period(low: float, high: float) -> Optional[str]:

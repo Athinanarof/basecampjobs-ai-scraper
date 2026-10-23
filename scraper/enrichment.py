@@ -51,7 +51,9 @@ async def batch_enrich(jobs: List[Dict], batch_size: int = 20) -> List[Dict]:
         batch = jobs[i : i + batch_size]
         results = _enrich_batch(batch)
         for job, result in zip(batch, results):
-            salary = extract_salary(job.get("raw_description", ""))
+            # Firecrawl jobs arrive with salary already extracted from the
+            # uncleaned markdown (scraper/firecrawl.py), don't redo it here.
+            salary = {} if "salary_period" in job else extract_salary(job.get("raw_description", ""))
             enriched.append({**job, **result, **salary})
 
     return enriched

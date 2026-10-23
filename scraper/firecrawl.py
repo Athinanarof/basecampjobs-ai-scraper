@@ -8,6 +8,7 @@ from firecrawl import FirecrawlApp
 from selectolax.parser import HTMLParser
 
 from storage.cache import filter_new
+from scraper.salary import extract_salary
 
 # "/apply/" is included because JazzHR (Cotopaxi) uses it as the job's own URL,
 # not just a CTA button — _BARE_APPLY_SUFFIX below still excludes the CTA case.
@@ -47,10 +48,10 @@ _WORKDAY_METADATA_LINE = re.compile(
 # JazzHR's "Job Title: / Job Level: / ..." recap block. It's typed into the
 # employer's own description text, not a separate container, so no exclude_tags
 # selector catches it — filtered here by its fixed label prefix instead.
-# "Job Compensation:" is kept: it's the only place JazzHR postings state pay,
-# and scraper/salary.py reads it from raw_description.
+# "Job Compensation:" is JazzHR's only pay field, so salary is extracted from
+# the raw markdown before this runs (see scrape_job_url).
 _JAZZHR_METADATA_LINE = re.compile(
-    r"^(Job Title|Job Level|Job Type|Job Location):"
+    r"^(Job Title|Job Level|Job Type|Job Location|Job Compensation):"
 )
 
 
@@ -302,6 +303,8 @@ def scrape_job_url(client: FirecrawlApp, url: str, company_name: str, company_id
         raw_md = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
         # read before _clean_markdown strips the Workday metadata line this needs
         workday_location = _location_from_workday_text(raw_md)
+        # likewise for JazzHR's "Job Compensation:" line
+        salary = extract_salary(_strip_application_form(raw_md))
         markdown = _strip_application_form(_clean_markdown(raw_md))
         metadata = result.metadata if hasattr(result, "metadata") else result.get("metadata", {})
         # "html" format strips <script> tags (drops the JSON-LD we need), so rawHtml
@@ -328,6 +331,7 @@ def scrape_job_url(client: FirecrawlApp, url: str, company_name: str, company_id
             "raw_description": markdown,
             "raw_employment_type": jobposting.get("employmentType"),
             "raw_valid_through": jobposting.get("validThrough"),
+            **salary,
         }
     except Exception as e:
         logging.warning(f"{company_name}: scrape failed [{url[:60]}] — {e}")
