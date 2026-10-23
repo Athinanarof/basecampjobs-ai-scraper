@@ -48,8 +48,6 @@ _WORKDAY_METADATA_LINE = re.compile(
 # JazzHR's "Job Title: / Job Level: / ..." recap block. It's typed into the
 # employer's own description text, not a separate container, so no exclude_tags
 # selector catches it — filtered here by its fixed label prefix instead.
-# "Job Compensation:" is JazzHR's only pay field, so salary is extracted from
-# the raw markdown before this runs (see scrape_job_url).
 _JAZZHR_METADATA_LINE = re.compile(
     r"^(Job Title|Job Level|Job Type|Job Location|Job Compensation):"
 )
@@ -303,7 +301,7 @@ def scrape_job_url(client: FirecrawlApp, url: str, company_name: str, company_id
         raw_md = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
         # read before _clean_markdown strips the Workday metadata line this needs
         workday_location = _location_from_workday_text(raw_md)
-        # likewise for JazzHR's "Job Compensation:" line
+        # before cleaning too: it strips JazzHR's "Job Compensation:" line
         salary = extract_salary(_strip_application_form(raw_md))
         markdown = _strip_application_form(_clean_markdown(raw_md))
         metadata = result.metadata if hasattr(result, "metadata") else result.get("metadata", {})
