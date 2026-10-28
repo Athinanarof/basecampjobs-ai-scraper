@@ -19,7 +19,7 @@ from typing import Dict, List
 import markdown as _markdown
 import pycountry
 
-from scraper.job_type import resolve_job_type
+from scraper.job_type import job_type_from_label, resolve_job_type
 
 # Basecamp's public enum JobType, minus Other (6): web has no entry for it and
 # renders "N/A", so scraper/job_type.py never resolves to it.
@@ -136,8 +136,10 @@ def build_payload(job: Dict) -> Dict:
     remote_status = job.get("remote_status")
 
     # jobTypeId is non-nullable server-side; resolve_job_type always returns a real type
-    # (text first, then JSON-LD employmentType, else part-time).
-    job_type_id = JOB_TYPE_MAP[resolve_job_type(job.get("raw_employment_type"), job.get("employment_type"))]
+    # (text first, then JSON-LD employmentType, else part-time). A labeled "Job Type:"
+    # line beats the AI's reading of the text.
+    text_type = job_type_from_label((job.get("page_fields") or {}).get("job type")) or job.get("employment_type")
+    job_type_id = JOB_TYPE_MAP[resolve_job_type(job.get("raw_employment_type"), text_type)]
     # remoteStatusId is non-nullable server-side too, but unlike jobTypeId has no "other"/
     # "unknown" value to fall back to (RemoteStatus.cs only defines 1-5). Sending null
     # crashes the whole request (confirmed: DetailsViewModel.RemoteStatusId can't deserialize

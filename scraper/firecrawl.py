@@ -39,18 +39,30 @@ _JUNK_LINES = {
 }
 
 # Workday's metadata block right after the title: "{label}{value}" with no space,
-# e.g. "locationsAustin, TX Store". Location is read from this on the raw
-# markdown (_location_from_workday_text) before this strips it.
+# e.g. "locationsAustin, TX Store".
 _WORKDAY_METADATA_LINE = re.compile(
-    r"^(locations|time type|posted on|time left to apply|job requisition id)\S"
+    r"^(locations|time type|posted on|time left to apply|job requisition id)(\S.*)$"
 )
 
 # JazzHR's "Job Title: / Job Level: / ..." recap block. It's typed into the
 # employer's own description text, not a separate container, so no exclude_tags
 # selector catches it — filtered here by its fixed label prefix instead.
 _JAZZHR_METADATA_LINE = re.compile(
-    r"^(Job Title|Job Level|Job Type|Job Location|Job Compensation):"
+    r"^(Job Title|Job Level|Job Type|Job Location|Job Compensation):\s*(.*)$"
 )
+
+
+def _labeled_fields(markdown: str) -> Dict[str, str]:
+    """Values of the labeled lines _clean_markdown strips from the published
+    description, keyed by lowercase label, e.g. {"job type": "Temporary - Part-Time"}.
+    Run on the raw markdown so cleaning doesn't lose them."""
+    fields: Dict[str, str] = {}
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        match = _WORKDAY_METADATA_LINE.match(stripped) or _JAZZHR_METADATA_LINE.match(stripped)
+        if match:
+            fields.setdefault(match.group(1).lower(), match.group(2).strip())
+    return fields
 
 
 # Signals the page isn't a real posting: either scraped before JS finished
@@ -299,8 +311,9 @@ def scrape_job_url(client: FirecrawlApp, url: str, company_name: str, company_id
             ],
         )
         raw_md = result.markdown if hasattr(result, "markdown") else result.get("markdown", "")
-        # read before _clean_markdown strips the Workday metadata line this needs
+        # read before _clean_markdown strips the Workday/JazzHR labeled lines these need
         workday_location = _location_from_workday_text(raw_md)
+        page_fields = _labeled_fields(raw_md)
         # before cleaning too: it strips JazzHR's "Job Compensation:" line
         salary = extract_salary(_strip_application_form(raw_md))
         markdown = _strip_application_form(_clean_markdown(raw_md))
@@ -329,6 +342,9 @@ def scrape_job_url(client: FirecrawlApp, url: str, company_name: str, company_id
             "raw_description": markdown,
             "raw_employment_type": jobposting.get("employmentType"),
             "raw_valid_through": jobposting.get("validThrough"),
+            # not mapped to the payload yet
+            "raw_experience": jobposting.get("experienceRequirements"),
+            "page_fields": page_fields,
             **salary,
         }
     except Exception as e:

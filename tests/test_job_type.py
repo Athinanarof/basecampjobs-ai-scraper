@@ -1,19 +1,7 @@
-"""Run with: python -m unittest discover tests
-
-Rules (agreed 2026-10-28):
-- Only the 6 job types web shows are valid. Other (6) is never sent.
-- The posting's text wins over JSON-LD employmentType, unless the text says nothing.
-- TEMPORARY -> Seasonal; full vs part from the text, part-time if the text doesn't say.
-- No signal at all -> Part-time (year-round).
-
-resolve_job_type(jsonld, text_type):
-  jsonld    JSON-LD employmentType as scraped (str, list or None), e.g. "FULL_TIME"
-  text_type what the AI read from the posting text, one of JOB_TYPE_MAP's keys
-            or "seasonal" (hours unknown), or None when the text says nothing
-"""
+"""Run with: python -m unittest discover tests"""
 import unittest
 
-from scraper.job_type import resolve_job_type
+from scraper.job_type import job_type_from_label, resolve_job_type
 from scraper.payload import build_payload, JOB_TYPE_MAP
 
 OTHER_ID = 6
@@ -84,6 +72,35 @@ class ResolveJobTypeTest(unittest.TestCase):
                     self.assertNotEqual(JOB_TYPE_MAP[result], OTHER_ID)
 
 
+class JobTypeFromLabelTest(unittest.TestCase):
+    def test_labels(self):
+        cases = {
+            "Temporary - Part-Time, Non-Exempt": "seasonal-part-time",  # Cotopaxi Boulder
+            "Temporary - Full-Time": "seasonal-full-time",
+            "Seasonal": "seasonal",
+            "Fixed-Term Contract, Full Time": "seasonal-full-time",
+            "Full-Time, Exempt": "full-time",
+            "Part Time": "part-time",
+            "Internship": "internship",
+            "Independent Contractor (1099)": "freelance",
+            "Freelance": "freelance",
+        }
+        for label, expected in cases.items():
+            with self.subTest(label=label):
+                self.assertEqual(job_type_from_label(label), expected)
+
+    def test_mixed_label_year_round_wins(self):
+        # Cotopaxi San Francisco offers both; year-round wins.
+        self.assertEqual(job_type_from_label("Part-Time, Non-Exempt and Temporary - Part-Time, Non-Exempt"), "part-time")
+        self.assertEqual(job_type_from_label("Temporary - Part-Time or Full-Time"), "full-time")
+        self.assertEqual(job_type_from_label("Seasonal / Part-Time"), "part-time")
+
+    def test_no_signal(self):
+        for label in (None, "", "Non-Exempt", "Store Hourly"):
+            with self.subTest(label=label):
+                self.assertIsNone(job_type_from_label(label))
+
+
 class PayloadJobTypeTest(unittest.TestCase):
     """build_payload must use the resolved type and never send Other."""
 
@@ -99,6 +116,19 @@ class PayloadJobTypeTest(unittest.TestCase):
     def test_no_signal_is_part_time_not_other(self):
         self.assertEqual(self._job_type_id(), JOB_TYPE_MAP["part-time"])
         self.assertEqual(self._job_type_id(employment_type="other"), JOB_TYPE_MAP["part-time"])
+
+    def test_job_type_label_beats_ai(self):
+        # Cotopaxi Boulder: the AI said part-time in one run, the label says temporary.
+        job = {
+            "raw_employment_type": "PART_TIME",
+            "employment_type": "part-time",
+            "page_fields": {"job type": "Temporary - Part-Time, Non-Exempt"},
+        }
+        self.assertEqual(self._job_type_id(**job), JOB_TYPE_MAP["seasonal-part-time"])
+
+    def test_ai_used_when_label_has_no_signal(self):
+        job = {"employment_type": "freelance", "page_fields": {"job type": "Non-Exempt"}}
+        self.assertEqual(self._job_type_id(**job), JOB_TYPE_MAP["freelance"])
 
     def test_no_job_type_other_text(self):
         self.assertNotIn("jobTypeOther", build_payload({"url": "https://example.com/job", "employment_type": "other"}))
