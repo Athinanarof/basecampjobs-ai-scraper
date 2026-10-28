@@ -30,7 +30,7 @@ Each entry must have:
   company       (string)
   location      (string or null)
   introduction  (string or null — a fresh 1-2 sentence plain-text summary of the role, written by you, not copied verbatim from the posting)
-  employment_type ("full-time" | "part-time" | "freelance" | "seasonal-full-time" | "seasonal-part-time" | "internship" | "other" | null — pick the closest match; "freelance" covers contract/1099 work)
+  employment_type ("full-time" | "part-time" | "freelance" | "seasonal-full-time" | "seasonal-part-time" | "internship" | "seasonal" | null — only what the posting text explicitly says, never guess; "freelance" covers contract/1099 work; "seasonal" covers seasonal/temporary work when hours aren't stated; null if the text doesn't say)
   remote_status ("onsite" | "hybrid" | "remote-in-region" | "remote-anywhere" | "on-the-road" | null — default to "onsite" if a physical work location is given and nothing suggests otherwise; "on-the-road" means travel is a core part of the job, e.g. field reps, regional roles requiring regular travel)
   skills        (array of strings, max 8)
   is_outdoor_industry (boolean — false if clearly unrelated)

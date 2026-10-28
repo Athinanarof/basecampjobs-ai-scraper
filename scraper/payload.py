@@ -19,14 +19,16 @@ from typing import Dict, List
 import markdown as _markdown
 import pycountry
 
-# Basecamp's public enum JobType
+from scraper.job_type import resolve_job_type
+
+# Basecamp's public enum JobType, minus Other (6): web has no entry for it and
+# renders "N/A", so scraper/job_type.py never resolves to it.
 JOB_TYPE_MAP = {
     "full-time": 1,
     "part-time": 2,
     "freelance": 3,
     "seasonal-part-time": 4,
     "internship": 5,
-    "other": 6,
     "seasonal-full-time": 7,
 }
 
@@ -131,13 +133,11 @@ def build_payload(job: Dict) -> Dict:
     # when matching wasn't run or came back empty, since focuses can't be empty server-side
     # (JobService.cs:360 crashes with 500 on empty).
     focuses = job.get("matched_focuses") or [PLACEHOLDER_FOCUS]
-    employment_type = job.get("employment_type")
     remote_status = job.get("remote_status")
 
-    # jobTypeId is non-nullable server-side, so fall back to "other" as a placeholder
-    # when we can't resolve a real value, rather than sending null (which the whole
-    # request gets rejected for).
-    job_type_id = JOB_TYPE_MAP.get(employment_type) or JOB_TYPE_MAP["other"]
+    # jobTypeId is non-nullable server-side; resolve_job_type always returns a real type
+    # (text first, then JSON-LD employmentType, else part-time).
+    job_type_id = JOB_TYPE_MAP[resolve_job_type(job.get("raw_employment_type"), job.get("employment_type"))]
     # remoteStatusId is non-nullable server-side too, but unlike jobTypeId has no "other"/
     # "unknown" value to fall back to (RemoteStatus.cs only defines 1-5). Sending null
     # crashes the whole request (confirmed: DetailsViewModel.RemoteStatusId can't deserialize
@@ -149,8 +149,6 @@ def build_payload(job: Dict) -> Dict:
         "title": title,
 
         "jobTypeId": job_type_id,
-        # Only carry the raw text when we couldn't map it (or it's genuinely "other"), otherwise jobTypeId already says it.
-        "jobTypeOther": employment_type if (employment_type not in JOB_TYPE_MAP or job_type_id == JOB_TYPE_MAP["other"]) else None,
 
         "isRemoteConsidered": job.get("is_remote_considered") or False,
         "isHousingIncluded": job.get("is_housing_included") or False,
