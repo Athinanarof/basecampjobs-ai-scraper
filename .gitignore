@@ -227,3 +227,4 @@ DEPLOYMENT_NOTES.md
 __azurite_db_*__.json
 __blobstorage__/
 __queuestorage__/
+AzuriteConfig
