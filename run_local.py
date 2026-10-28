@@ -301,12 +301,16 @@ async def run_all(skip_ats: bool = False):
     await basecamp_client.match_skills_batch(to_enrich)
     await basecamp_client.match_focuses_batch(to_enrich)
     enriched = await batch_enrich(to_enrich, batch_size=20)
+    failed = [j for j in enriched if j["enrichment_failed"]]
+    if failed:
+        # Kept out of jobs_output.json so --step push never sends unenriched jobs.
+        print(f"  [warn] enrichment failed for {len(failed)} jobs, not saved to jobs_output.json")
     with_skills = sum(1 for j in enriched if j.get("skills"))
-    print(f"[3/4] Enriched: {len(enriched)} jobs ({with_skills} with skills)")
+    print(f"[3/4] Enriched: {len(enriched) - len(failed)} jobs ({with_skills} with skills)")
     save_debug("step_3_enriched", enriched)
     save_debug("step_4_payload", enriched, as_payload=True)
 
-    save_local(enriched)
+    save_local([j for j in enriched if not j["enrichment_failed"]])
     print(f"[4/4] Done.")
 
 

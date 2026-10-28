@@ -25,7 +25,8 @@ You extract structured job data from raw job postings.
 Return a valid JSON object with key "jobs" containing an array with one entry per input job, in order.
 
 Each entry must have:
-  title         (string)
+  job_number    (integer — the N from the "JOB N" header of the input job this entry describes)
+  title        (string)
   company       (string)
   location      (string or null)
   introduction  (string or null — a fresh 1-2 sentence plain-text summary of the role, written by you, not copied verbatim from the posting)
@@ -53,7 +54,9 @@ async def batch_enrich(jobs: List[Dict], batch_size: int = 20) -> List[Dict]:
         for job, result in zip(batch, results):
             # Firecrawl jobs already carry salary (see scrape_job_url).
             salary = {} if "salary_period" in job else extract_salary(job.get("raw_description", ""))
-            enriched.append({**job, **result, **salary})
+            # Callers must not publish or mark-seen a failed job: its AI fields are
+            # missing, and marking it seen would mean it's never retried.
+            enriched.append({**job, **result, **salary, "enrichment_failed": not result})
 
     return enriched
 
@@ -86,18 +89,27 @@ def _enrich_batch(batch: List[Dict]) -> List[Dict]:
             max_completion_tokens=8192,
         )
         data = json.loads(response.choices[0].message.content)
-        results = data.get("jobs", [])
-
-        if len(results) != len(batch):
-            logging.warning(
-                f"Enrichment count mismatch: sent {len(batch)}, got {len(results)} — padding"
-            )
-            while len(results) < len(batch):
-                results.append({})
-            results = results[: len(batch)]
-
-        return results
+        return _align_results(batch, data.get("jobs", []))
 
     except Exception as e:
         logging.error(f"Enrichment batch failed: {e}")
         return [{} for _ in batch]
+
+
+def _align_results(batch: List[Dict], results: List[Dict]) -> List[Dict]:
+    """Match each result to its input job by job_number, not list position. If the
+    model skips or reorders a job, positional matching would shift every later
+    result onto the wrong job. Jobs with no matching result get {} (failed)."""
+    by_number: Dict[int, Dict] = {}
+    for result in results:
+        number = result.pop("job_number", None) if isinstance(result, dict) else None
+        if not isinstance(number, int) or not 1 <= number <= len(batch) or number in by_number:
+            logging.warning(f"Enrichment result with missing/invalid/duplicate job_number {number!r}, dropped")
+            continue
+        by_number[number] = result
+
+    missing = [j["url"] for idx, j in enumerate(batch, 1) if idx not in by_number]
+    if missing:
+        logging.warning(f"Enrichment returned no result for {len(missing)}/{len(batch)} jobs: {missing}")
+
+    return [by_number.get(idx, {}) for idx in range(1, len(batch) + 1)]

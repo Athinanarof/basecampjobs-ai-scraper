@@ -63,11 +63,16 @@ async def _run():
     await basecamp_client.match_skills_batch(new_jobs)
     await basecamp_client.match_focuses_batch(new_jobs)
     enriched = await batch_enrich(new_jobs, batch_size=20)
+    failed = [j for j in enriched if j["enrichment_failed"]]
+    enriched = [j for j in enriched if not j["enrichment_failed"]]
     logging.info(f"Enriched {len(enriched)} jobs")
+    if failed:
+        # Not published and not marked seen, so the next run retries them.
+        logging.warning(f"Enrichment failed for {len(failed)} jobs, will retry next run: {[j['url'] for j in failed]}")
 
     save_jobs(enriched)
 
-    outdoor_jobs = [j for j in enriched if j.get("is_outdoor_industry", True)]
+    outdoor_jobs = [j for j in enriched if j.get("is_outdoor_industry") is True]
     logging.info(f"Publishing {len(outdoor_jobs)}/{len(enriched)} outdoor-industry jobs to Basecamp")
 
     if outdoor_jobs:
