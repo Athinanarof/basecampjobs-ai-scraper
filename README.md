@@ -13,14 +13,33 @@ Daily timer (6am UTC)
          ↓
     Deduplication (skip already-seen job URLs, via Azure Table Storage)
          ↓
-    Basecamp skill matching → matches scraped text against Basecamp's own Skills table
+    Basecamp skill/focus matching → matches scraped text against Basecamp's own Skills and Focuses
          ↓
-    Azure OpenAI GPT-5o-mini → enriches each job with field, niche, employment type, etc.
+    Azure OpenAI gpt-5-mini → reads the text: title, introduction, remote status, job type, etc.
+         ↓
+    Field rules in code → job type, location, experience and salary (see below)
          ↓
     Azure Table Storage → archives the enriched record
          ↓
     Basecamp API → publishes outdoor-industry jobs live (create-external-job)
 ```
+
+---
+
+## How Fields Are Resolved
+
+Job type, location, experience and salary are decided in code from three sources, so the same posting always gives the same result:
+
+- **Posting text**: the description itself.
+- **JSON-LD**: structured data career sites embed for search engines, following the [schema.org JobPosting](https://schema.org/JobPosting) format ([Google's guide](https://developers.google.com/search/docs/appearance/structured-data/job-posting)). It's invisible to visitors and usually carries the job type (`employmentType`), location (`jobLocation`) and sometimes the experience level.
+- **Labeled lines**: some job platforms print fixed labels in the page. [JazzHR](https://www.jazzhr.com/) (Cotopaxi) writes `Job Type:` / `Job Level:` lines, and Workday (Patagonia) a `time type` header. They're read before the description is cleaned for publishing (`scraper/firecrawl.py`, `page_fields`).
+
+| Field | Rule | Code |
+|---|---|---|
+| Job type | `Job Type:` label → title or `Role:` line → AI reading of the text → JSON-LD → Part-time. Only the 6 types the web app shows are sent, never "Other". `TEMPORARY`, fixed-term and seasonal map to Seasonal | `scraper/job_type.py` |
+| Location | The text's `Location:` line, else JSON-LD. Store/facility names are reduced to a real city (`Chicago Mag Mile, IL Store` → Chicago, IL), the state is sent as a code (`CA`), every location is sent when there are several, and lat/lng come from a local [GeoNames](https://www.geonames.org/) table for candidate matching | `scraper/location.py`, `scraper/data/cities_us_ca.tsv` |
+| Experience | Years in the requirements; when several are listed, the lowest wins (`3-5 years` → 3+). Without years, the level (`Entry Level`). Left empty when the posting says nothing | `scraper/experience.py` |
+| Salary | Regex over the full text, preferring labeled pay (`Pay Range`, `Compensation`). Alternative rates (`$22.05 (day) or $24.05 (swing)`) become one range | `scraper/salary.py` |
 
 ---
 
@@ -108,7 +127,7 @@ cp local.settings.json.example local.settings.json
 
 - `FIRECRAWL_API_KEY` → [firecrawl.dev](https://firecrawl.dev) → Dashboard → API Keys
 - `FIRECRAWL_JOBS_PER_COMPANY` → optional, defaults to `5`. Caps how many job
-  pages get scraped per Firecrawl company (REI, Backcountry) per run, raise
+  pages get scraped per Firecrawl company (REI, Patagonia, Cotopaxi) per run, raise
   it to pull more of each company's listings, at the cost of more Firecrawl
   credits and a longer run (`scraper/firecrawl.py` sleeps 7s between requests
   to stay under the free plan's rate limit).
@@ -144,7 +163,7 @@ Fetches jobs from Greenhouse, Lever, and SmartRecruiters for all companies in `c
 ```powershell
 python run_local.py --step firecrawl
 ```
-Scrapes career pages for companies marked `"ats": "firecrawl"` in `companies.json` (e.g. REI, Backcountry). Only scrapes job URLs not already in the dedup cache (Azure Table Storage), so it needs Azurite running even for this step alone. Uses Firecrawl credits.
+Scrapes career pages for companies marked `"ats": "firecrawl"` in `companies.json` (REI, Patagonia, Cotopaxi). Only scrapes job URLs not already in the dedup cache (Azure Table Storage), so it needs Azurite running even for this step alone. Uses Firecrawl credits.
 
 ---
 
@@ -173,7 +192,28 @@ are tracked in `debug/pushed_urls.json`, so re-running this only pushes new jobs
 ```powershell
 python run_local.py
 ```
-Runs all steps end-to-end except push: ATS fetch → Firecrawl scrape → dedup → enrich → save to Azurite. Run `--step push` separately when you're ready to actually publish.
+Runs all steps end-to-end except push: ATS fetch → Firecrawl scrape → dedup → enrich → save to Azurite. Run `--step push` separately when you're ready to actually publish. Add `--skip-ats` to run only the Firecrawl companies.
+
+---
+
+## Testing
+
+Two checks, both offline (no API keys, no credits):
+
+**Unit tests**: rules for each field, one case at a time.
+```powershell
+.venv\Scripts\python.exe -m unittest discover tests
+```
+
+**Golden set eval**: runs the field rules over 67 real postings (`tests/golden/golden_set.json`) and compares job type, location, experience and salary with the reviewed correct values. It reuses the AI output saved with each posting, so it makes no AI calls.
+```powershell
+.venv\Scripts\python.exe tests\golden\run_eval.py
+```
+It prints the score per field and company plus every failure, and saves the detail to `tests/golden/results/<timestamp>.json` (gitignored).
+
+GitHub Actions runs both on every pull request and push (`.github/workflows/tests.yml`), and `deploy.yml` only deploys when they pass. Run them locally before committing changes to `scraper/`. A failure in the eval means a change broke a posting that used to come out right, or a business rule changed and the expected value needs updating.
+
+**Updating the golden set**: when a real posting comes out wrong, add it with its correct value and rebuild with `tests/golden/build_golden_set.py` (`--enriched` pipeline output, `--proposals` proposed values, `--reviews` exported reviews).
 
 ---
 
@@ -216,15 +256,25 @@ basecampjobs-ai-scraper/
 │   ├── ats.py               # Greenhouse / Lever / SmartRecruiters API adapters
 │   ├── firecrawl.py         # Firecrawl scraper for JS-rendered career pages
 │   ├── fetcher.py           # Plain HTTP fetcher (static pages fallback)
-│   ├── enrichment.py        # Azure OpenAI GPT-4o-mini batch enrichment
+│   ├── enrichment.py        # Azure OpenAI gpt-5-mini batch enrichment
+│   ├── job_type.py          # Job type rules (label, title, AI, JSON-LD)
+│   ├── location.py          # City, state code, country and lat/lng
+│   ├── experience.py        # Years of experience from the posting
+│   ├── salary.py            # Salary extraction from the posting text
+│   ├── data/
+│   │   └── cities_us_ca.tsv # GeoNames US + Canada city table (lat/lng)
 │   ├── payload.py           # Maps enriched jobs to the create-external-job payload shape
 │   └── basecamp_client.py   # Real Basecamp API client (login + create-external-job)
 ├── storage/
 │   ├── cache.py             # Azure Table Storage URL deduplication
 │   └── writer.py            # Azure Table Storage job writer
+├── tests/
+│   ├── test_*.py            # Unit tests
+│   └── golden/              # Golden set eval (golden_set.json, run_eval.py, build_golden_set.py)
 └── .github/
     └── workflows/
-        └── deploy.yml       # GitHub Actions → deploys to Azure on push to main
+        ├── tests.yml        # GitHub Actions → unit tests + golden set eval on PRs and pushes
+        └── deploy.yml       # GitHub Actions → runs tests, then deploys to Azure on push to main
 ```
 
 > **Why `storage/cache.py` uses its own Table Storage instead of Basecamp's main database:** it's a narrow, scraper-only concern with no relevance to the rest of the platform. Keeping it here avoids adding a table/endpoint to `basecampjobs-core` and stays fast, direct storage access instead of extra HTTP round-trips per URL. Cost stays effectively $0 either way.
