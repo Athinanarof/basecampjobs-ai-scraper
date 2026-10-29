@@ -5,7 +5,7 @@ description, but must be read first so their values aren't lost (same pattern as
 """
 import unittest
 
-from scraper.firecrawl import _clean_markdown, _labeled_fields
+from scraper.firecrawl import _clean_markdown, _extract_jobposting_jsonld, _labeled_fields
 
 # Real markdown captured 2026-10-28, trimmed.
 WORKDAY_MD = """## Warehouse Associate – Fixed-Term Contract
@@ -72,6 +72,13 @@ class LabeledFieldsTest(unittest.TestCase):
                 self.assertNotIn(value, cleaned.replace("**Role:** Warehouse Associate – Fixed-Term Contract", ""))
         self.assertIn("Holiday Season", _clean_markdown(JAZZHR_MD))
         self.assertIn("Contract Duration", _clean_markdown(WORKDAY_MD))
+
+
+class JsonLdTest(unittest.TestCase):
+    def test_jobposting_is_read_from_html(self):
+        html = ('<html><head><script type="application/ld+json">'
+                '{"@type": "JobPosting", "employmentType": "FULL_TIME"}</script></head><body></body></html>')
+        self.assertEqual(_extract_jobposting_jsonld(html)["employmentType"], "FULL_TIME")
 
 
 if __name__ == "__main__":

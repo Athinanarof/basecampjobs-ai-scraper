@@ -5,7 +5,7 @@ import logging
 import asyncio
 from typing import List, Dict, Optional
 from firecrawl import FirecrawlApp
-from selectolax.parser import HTMLParser
+from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from storage.cache import filter_new
 from scraper.salary import extract_salary
