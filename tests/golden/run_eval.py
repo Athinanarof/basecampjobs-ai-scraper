@@ -5,6 +5,7 @@ AI's employment_type saved with each posting is reused.
 
 Run from the repo root:  python tests/golden/run_eval.py
 Writes tests/golden/results/<timestamp>.json and prints a summary plus failures.
+Exits with 1 when any field fails, so CI stops.
 
 Salary is re-extracted from the text so salary.py changes show up here. The
 cleaned description lacks JazzHR's "Job Compensation:" line, so it's added back
@@ -76,7 +77,7 @@ def main():
 
     passed = sum(r["pass"] for r in rows)
     reviewed = sum(r["reviewed"] for r in rows)
-    print(f"{passed}/{len(rows)} fields correct ({passed / len(rows):.0%}) · {reviewed}/{len(rows)} expected values reviewed\n")
+    print(f"{passed}/{len(rows)} fields correct ({passed / len(rows):.1%}) · {reviewed}/{len(rows)} expected values reviewed\n")
     by_field = collections.Counter((r["field"], r["pass"]) for r in rows)
     by_company = collections.Counter((r["company"], r["pass"]) for r in rows)
     for name, counter, keys in (("Field", by_field, FIELDS), ("Company", by_company, sorted({r["company"] for r in rows}))):
@@ -89,7 +90,8 @@ def main():
         for r in failures:
             print(f"  [{r['field']}] {r['company']} · {r['title'][:45]}\n      expected: {r['expected']}\n      got:      {r['got']}")
     print(f"\nResults: {out}")
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
