@@ -228,3 +228,6 @@ __azurite_db_*__.json
 __blobstorage__/
 __queuestorage__/
 AzuriteConfig
+
+# Eval run outputs (tests/golden/run_eval.py)
+tests/golden/results/
