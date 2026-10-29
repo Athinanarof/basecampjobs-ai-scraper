@@ -17,9 +17,8 @@ backend behaves exactly as it does today for companies we haven't matched yet.
 """
 from typing import Dict, List
 import markdown as _markdown
-import pycountry
-
 from scraper.job_type import job_type_from_label, resolve_job_type
+from scraper.location import location_line, parse_locations
 
 # Basecamp's public enum JobType, minus Other (6): web has no entry for it and
 # renders "N/A", so scraper/job_type.py never resolves to it.
@@ -73,41 +72,20 @@ def _salary_compensation(job: Dict) -> Dict:
     }
 
 
-def _country_code(name: str) -> Dict[str, str]:
-    """Basecamp's Country column is MaxLength(3), so a full name like "United
-    States" would get silently truncated to "Uni" by SQL Server. Resolve to a
-    real ISO code via pycountry; LongCountry (MaxLength 64) keeps the full name
-    regardless of whether the code lookup succeeds."""
-    if not name:
-        return {"country": None, "long_country": None}
-    try:
-        return {"country": pycountry.countries.lookup(name).alpha_2, "long_country": name}
-    except LookupError:
-        return {"country": None, "long_country": name}
-
-
 def _locations(job: Dict) -> List[Dict]:
-    # Only Firecrawl-sourced jobs (REI) currently carry structured city/region/country
-    # (from JSON-LD, see scraper/firecrawl.py). ATS sources (Greenhouse/Lever/
-    # SmartRecruiters) only give us a single free-text location string, not
-    # separate fields, so they get [] here for now.
-    struct = job.get("location_struct")
-    if not struct or not (struct.get("city") or struct.get("region")):
-        return []
-
-    country = _country_code(struct.get("country"))
+    # ATS sources (Greenhouse/Lever/SmartRecruiters) have no location_struct or
+    # "Location:" line, so they get [] here for now.
+    description = job.get("description") or job.get("raw_description") or ""
     return [{
-        "city": struct.get("city"),
-        "stateOrProvince": struct.get("region"),
-        "longStateOrProvince": struct.get("region"),
-        "country": country["country"],
-        "longCountry": country["long_country"],
-        # No lat/lng anywhere in the pipeline yet. 0/0 doesn't error server-side
-        # (GeolocationRepository builds the point unconditionally) but does place
-        # the pin at (0,0) ["Null Island"] until real geocoding is added.
-        "lat": 0,
-        "lng": 0,
-    }]
+        "city": l["city"],
+        "stateOrProvince": l["state"],
+        "longStateOrProvince": l["state_name"],
+        "country": l["country"],
+        "longCountry": l["country_name"],
+        # 0/0 when the city isn't in the table; the job still matches by state/country.
+        "lat": l["lat"],
+        "lng": l["lng"],
+    } for l in parse_locations(location_line(description), job.get("location_struct"))]
 
 
 def _description_html(text: str) -> str:
