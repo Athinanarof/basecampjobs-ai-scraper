@@ -30,12 +30,12 @@ class ResolveExperienceTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertExperience(text, None, expected)
 
-    def test_highest_requirement_wins(self):
+    def test_lowest_requirement_wins(self):
         text = "- 2-4 years retail experience\n- 5+ years of management experience"
-        self.assertExperience(text, None, Y5)
+        self.assertExperience(text, None, Y1)
         # REI Technology Program Management
         text = "- Required: 10+ years leading complex tech programs\n- Required: 7+ years leading program managers"
-        self.assertExperience(text, None, Y10)
+        self.assertExperience(text, None, Y5)
 
     def test_age_is_not_experience(self):
         self.assertExperience("- 18 years or older", None, None)  # Cotopaxi

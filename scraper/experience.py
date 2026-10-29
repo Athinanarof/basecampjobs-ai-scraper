@@ -1,8 +1,8 @@
 """
 Basecamp's YearsOfExperience id for a posting, decided in code (no AI).
 
-Years stated in the text win, using the highest requirement and the lower
-bound of each range ("3-5 years" -> 3+). Without years, a level label
+Years stated in the text win, using the lowest requirement (the client's
+choice) and the lower bound of each range ("3-5 years" -> 3+). Without years, a level label
 ("Entry Level") is used. None when the posting says nothing.
 """
 import re
@@ -37,13 +37,13 @@ def _bucket(years: int) -> int:
 
 
 def _years_required(text: str) -> Optional[int]:
-    """Highest lower bound of the years mentioned as experience."""
+    """Lowest lower bound of the years mentioned as experience."""
     found = [int(m.group(1)) for m in _LABEL_RE.finditer(text)]
     for line in text.splitlines():
         if _REQUIREMENT_LINE_RE.search(line):
             found += [int(m.group(1)) for m in _YEARS_RE.finditer(line)]
     found = [y for y in found if y <= _MAX_YEARS]
-    return max(found) if found else None
+    return min(found) if found else None
 
 
 def resolve_experience(text: Optional[str], level: Optional[str]) -> Optional[int]:
