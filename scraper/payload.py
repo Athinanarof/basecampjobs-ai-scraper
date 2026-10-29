@@ -17,6 +17,7 @@ backend behaves exactly as it does today for companies we haven't matched yet.
 """
 from typing import Dict, List
 import markdown as _markdown
+from scraper.experience import resolve_experience
 from scraper.job_type import job_type_from_label, resolve_job_type
 from scraper.location import location_line, parse_locations
 
@@ -165,6 +166,12 @@ def build_payload(job: Dict) -> Dict:
 
     if remote_status_id is not None:
         payload["remoteStatusId"] = remote_status_id
+
+    # Non-nullable server-side like remoteStatusId: omitted when unknown, never null.
+    level = job.get("raw_experience") or (job.get("page_fields") or {}).get("job level")
+    years_of_experience_id = resolve_experience(description, level)
+    if years_of_experience_id is not None:
+        payload["qualifications"]["yearsOfExperienceId"] = years_of_experience_id
 
     company_id = job.get("company_id")
     if company_id:
