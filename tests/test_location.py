@@ -45,6 +45,12 @@ class ParseLocationsTest(unittest.TestCase):
         self.assertLocations(None, {"city": "Boulder", "region": "CO", "country": None}, [("Boulder", "CO", "US")])  # Cotopaxi
         self.assertLocations(None, {"city": "Santa Cruz, CA Store", "region": None, "country": "United States of America"}, [("Santa Cruz", "CA", "US")])
 
+    def test_city_spelling_variants(self):
+        self.assertLocations(None, {"city": "St George", "region": "Utah"}, [("St George", "UT", "US")])  # REI
+        self.assertLocations(None, {"city": "St. George", "region": "Utah"}, [("St. George", "UT", "US")])
+        self.assertLocations(None, {"city": "Bailey's Crossroads", "region": "Virginia"}, [("Bailey's Crossroads", "VA", "US")])  # REI
+        self.assertLocations("Mt. Shasta, CA", None, [("Mt. Shasta", "CA", "US")])
+
     def test_unknown_city_keeps_state_only(self):
         self.assertLocations("Zzyzx Outpost, NV", None, [(None, "NV", "US")])
 

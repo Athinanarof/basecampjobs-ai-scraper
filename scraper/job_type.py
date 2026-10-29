@@ -56,6 +56,33 @@ def _label_part_type(label: str) -> Optional[str]:
     return hours
 
 
+_ROLE_LINE_RE = re.compile(r"^\s*Role\s*:\s*(.+?)\s*$", re.IGNORECASE)
+
+
+def role_line(description: Optional[str]) -> Optional[str]:
+    """Value of a "**Role:** ..." line in the posting text (Patagonia), if any."""
+    for line in (description or "").splitlines():
+        match = _ROLE_LINE_RE.match(line.replace("*", ""))
+        if match:
+            return match.group(1)
+    return None
+
+
+def text_job_type(label: Optional[str], titles: List[Optional[str]], ai_type: Optional[str]) -> Optional[str]:
+    """What the posting text says, for resolve_job_type's text_type. Read in code first:
+    a "Job Type:" label, then the title or "Role:" line (e.g. "Substitute Teacher-Seasonal"),
+    then the AI's reading. A title that only says "seasonal" keeps the AI's hours."""
+    from_label = job_type_from_label(label)
+    if from_label:
+        return from_label
+    from_title = next((t for t in map(job_type_from_label, titles) if t), None)
+    if from_title == "seasonal":
+        if ai_type in _HOURS:
+            return f"seasonal-{ai_type}"
+        return ai_type if ai_type in ("seasonal-full-time", "seasonal-part-time") else "seasonal"
+    return from_title or ai_type
+
+
 def resolve_job_type(jsonld: Union[str, List[str], None], text_type: Optional[str]) -> str:
     """jsonld: JSON-LD employmentType as scraped, e.g. "FULL_TIME" or a list.
     text_type: what the text says, a JOB_TYPE_MAP key or "seasonal" (hours unknown), None if nothing."""

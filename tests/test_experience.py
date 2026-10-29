@@ -33,6 +33,9 @@ class ResolveExperienceTest(unittest.TestCase):
     def test_highest_requirement_wins(self):
         text = "- 2-4 years retail experience\n- 5+ years of management experience"
         self.assertExperience(text, None, Y5)
+        # REI Technology Program Management
+        text = "- Required: 10+ years leading complex tech programs\n- Required: 7+ years leading program managers"
+        self.assertExperience(text, None, Y10)
 
     def test_age_is_not_experience(self):
         self.assertExperience("- 18 years or older", None, None)  # Cotopaxi

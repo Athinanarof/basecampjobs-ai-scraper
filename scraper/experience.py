@@ -17,6 +17,11 @@ _LEVELS = {"entry": ENTRY_LEVEL, "mid": FROM_3}
 _YEARS_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:(?:-|–|—|to)\s*\d{1,2}\s*\+?\s*)?(?:years?|yrs?)\b(?![^.\n]{0,15}\b(?:old|older|of age)\b)",
                        re.IGNORECASE)
 _LABEL_RE = re.compile(r"years\s+of\s+experience\W*(\d{1,2})", re.IGNORECASE)
+# Lines where years are a requirement even without the word "experience",
+# e.g. "- Required: 10+ years leading complex tech programs".
+_REQUIREMENT_LINE_RE = re.compile(r"experienc|^\s*[-•*]|\b(?:required|requirement|minimum|qualification)", re.IGNORECASE)
+# Company history ("for 85 years") isn't a requirement.
+_MAX_YEARS = 30
 
 
 def _bucket(years: int) -> int:
@@ -35,8 +40,9 @@ def _years_required(text: str) -> Optional[int]:
     """Highest lower bound of the years mentioned as experience."""
     found = [int(m.group(1)) for m in _LABEL_RE.finditer(text)]
     for line in text.splitlines():
-        if "experienc" in line.lower():
+        if _REQUIREMENT_LINE_RE.search(line):
             found += [int(m.group(1)) for m in _YEARS_RE.finditer(line)]
+    found = [y for y in found if y <= _MAX_YEARS]
     return max(found) if found else None
 
 

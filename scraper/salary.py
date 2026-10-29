@@ -57,6 +57,8 @@ _LABEL_WINDOW = 120
 _HOURLY_HINT_RE = re.compile(r"\bhourly\b|\bper\s+hour\b", re.IGNORECASE)
 _YEARLY_HINT_RE = re.compile(r"\bannual(?:ly)?\b|\byearly\b|\bper\s+year\b", re.IGNORECASE)
 
+_ALTERNATIVE_RE = re.compile(rf"\s*(?:\([^)]{{0,30}}\))?\s*or\s+{_AMOUNT}", re.IGNORECASE)
+
 _YEARLY_MIN = 10_000
 _HOURLY_MAX = 300
 
@@ -208,13 +210,21 @@ def extract_salary(text: str) -> Dict[str, Optional[object]]:
     if best is None:
         return empty
 
+    low, high, end = best.low, best.high, best.end
+    # "$22.05 (day) or $24.05 (swing)" -> one range, since Basecamp only has min/max.
+    alt = _ALTERNATIVE_RE.match(text, end)
+    if alt and not _MAGNITUDE_AFTER_RE.match(text, alt.end()):
+        value = _to_number(alt.group(1), alt.group(2))
+        if 0.5 <= value / high <= 2:
+            low, high, end = min(low, value), max(high, value), alt.end()
+
     period = best.period or best.label_hint
     # Size-based guessing only for labeled figures; unlabeled ones may be prices.
     if period is None and best.labeled:
-        period = _infer_period(best.low, best.high)
+        period = _infer_period(low, high)
     return {
-        "salary_range": text[best.start:best.end].strip(),
-        "salary_min": best.low,
-        "salary_max": best.high,
+        "salary_range": text[best.start:end].strip(),
+        "salary_min": low,
+        "salary_max": high,
         "salary_period": period,
     }

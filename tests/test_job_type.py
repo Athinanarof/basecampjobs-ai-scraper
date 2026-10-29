@@ -1,7 +1,7 @@
 """Run with: python -m unittest discover tests"""
 import unittest
 
-from scraper.job_type import job_type_from_label, resolve_job_type
+from scraper.job_type import job_type_from_label, resolve_job_type, role_line, text_job_type
 from scraper.payload import build_payload, JOB_TYPE_MAP
 
 OTHER_ID = 6
@@ -99,6 +99,22 @@ class JobTypeFromLabelTest(unittest.TestCase):
         for label in (None, "", "Non-Exempt", "Store Hourly"):
             with self.subTest(label=label):
                 self.assertIsNone(job_type_from_label(label))
+
+
+class TextJobTypeTest(unittest.TestCase):
+    def test_role_line(self):
+        self.assertEqual(role_line("**Role:** Substitute Teacher-Seasonal/Intermittent\n**Team:** ..."),
+                         "Substitute Teacher-Seasonal/Intermittent")  # Patagonia
+        self.assertIsNone(role_line("## Store Sales Specialist"))
+
+    def test_order(self):
+        self.assertEqual(text_job_type("Temporary - Part-Time", ["Seasonal"], "full-time"), "seasonal-part-time")
+        self.assertEqual(text_job_type(None, ["Substitute Teacher", "Substitute Teacher-Seasonal/Intermittent"], None), "seasonal")
+        self.assertEqual(text_job_type(None, ["Customer Experience Guide - Seasonal"], "part-time"), "seasonal-part-time")
+        self.assertEqual(text_job_type(None, ["Customer Experience Guide - Seasonal"], "seasonal-full-time"), "seasonal-full-time")
+        self.assertEqual(text_job_type(None, ["Marina Del Rey Part Time Store Sales Specialist"], None), "part-time")
+        self.assertEqual(text_job_type(None, ["Store Manager", None], "full-time"), "full-time")
+        self.assertIsNone(text_job_type(None, [None, None], None))
 
 
 class PayloadJobTypeTest(unittest.TestCase):

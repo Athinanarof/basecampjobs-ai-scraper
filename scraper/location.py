@@ -35,12 +35,22 @@ def _states() -> Dict[str, Tuple[str, str, str]]:
     return states
 
 
+_ABBREVIATIONS = {"st": "saint", "ste": "sainte", "mt": "mount", "ft": "fort"}
+
+
+def _city_key(name: str) -> str:
+    """Spelling-insensitive key: "St George" == "St. George" == "Saint George",
+    "Bailey's Crossroads" == "Baileys Crossroads" (GeoNames' spellings)."""
+    words = re.sub(r"[.'’]", "", name.lower()).split()
+    return " ".join(_ABBREVIATIONS.get(w, w) for w in words)
+
+
 @lru_cache(maxsize=1)
-def _cities() -> Dict[Tuple[str, str], Tuple[str, float, float]]:
-    """(lowercase city, state code) -> (city, lat, lng)."""
+def _cities() -> Dict[Tuple[str, str], Tuple[float, float]]:
+    """(city key, state code) -> (lat, lng)."""
     with open(_CITIES_FILE, encoding="utf-8") as f:
         rows = csv.DictReader((line for line in f if not line.startswith("#")), delimiter="\t")
-        return {(r["city"].lower(), r["state"]): (r["city"], float(r["lat"]), float(r["lng"])) for r in rows}
+        return {(_city_key(r["city"]), r["state"]): (float(r["lat"]), float(r["lng"])) for r in rows}
 
 
 def location_line(description: Optional[str]) -> Optional[str]:
@@ -68,13 +78,15 @@ def _find_state(tokens: List[str]) -> Optional[Tuple[int, Tuple[str, str, str]]]
 
 
 def _find_city(words: List[str], state: str) -> Optional[Tuple[str, float, float]]:
-    """Longest run of words that is a real city in that state, e.g. "Chicago Mag Mile" -> Chicago."""
+    """Longest run of words that is a real city in that state, e.g. "Chicago Mag Mile" -> Chicago.
+    Returns the city as the posting spells it."""
     cities = _cities()
     for size in range(len(words), 0, -1):
         for start in range(len(words) - size + 1):
-            hit = cities.get((" ".join(words[start:start + size]).lower(), state))
+            city = " ".join(words[start:start + size])
+            hit = cities.get((_city_key(city), state))
             if hit:
-                return hit
+                return city, hit[0], hit[1]
     return None
 
 

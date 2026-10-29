@@ -34,6 +34,11 @@ class ExtractSalaryTest(unittest.TestCase):
         self.assertSalary("Hourly Rate: $21.00", (21.0, 21.0, "hour"))
         self.assertSalary("**Compensation:**\n$95,000", (95000.0, 95000.0, "year"))
 
+    def test_alternative_rates_become_a_range(self):
+        self.assertSalary("**Compensation:** Hiring Rate: $22.05 (day) or $24.05 (swing)", (22.05, 24.05, "hour"))  # Patagonia
+        self.assertSalary("Pay: $20/hr or $24/hr with certification", (20.0, 24.0, "hour"))
+        self.assertSalary("Salary: $20/hr or $40,000 per year", (20.0, 20.0, "hour"))  # not comparable, not merged
+
     def test_non_pay_figures_are_skipped(self):
         self.assertSalary(
             "You will manage a retail profit center of $5-$30 million in sales volume!\n\n"
