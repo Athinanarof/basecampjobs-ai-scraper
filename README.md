@@ -8,10 +8,13 @@ Automated job scraper for the Basecamp outdoor industry job board. Runs daily on
 
 ```
 Daily timer (6am UTC)
+    Basecamp API → URLs of jobs it already has (GET Job/scrapped-urls); the run stops if unreachable
+         ↓
     ├── ATS APIs (Greenhouse / Lever / SmartRecruiters) → free structured JSON
     └── Firecrawl → scrapes any JS-rendered career page (REI, Workday, iCIMS, etc.)
          ↓
-    Deduplication (skip already-seen job URLs, via Azure Table Storage)
+    Deduplication → skips URLs Basecamp already has (no duplicate jobs) and URLs
+                    already processed but not published (Azure Table Storage cache)
          ↓
     Basecamp skill/focus matching → matches scraped text against Basecamp's own Skills and Focuses
          ↓

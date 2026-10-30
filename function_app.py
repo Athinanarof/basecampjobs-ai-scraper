@@ -5,7 +5,7 @@ import json
 import os
 
 from scraper.ats import fetch_all as fetch_ats
-from scraper.firecrawl import scrape_all as fetch_firecrawl
+from scraper.firecrawl import _drop_known, scrape_all as fetch_firecrawl
 from scraper.enrichment import batch_enrich
 from scraper.payload import build_payload
 from scraper import basecamp_client
@@ -40,12 +40,20 @@ async def _run():
     ats_companies       = [c for c in companies if c["ats"] in ("greenhouse", "lever", "smartrecruiters")]
     firecrawl_companies = [c for c in companies if c["ats"] == "firecrawl"]
 
+    # Jobs Basecamp already has, skipped before scraping so no credits are spent on them
+    try:
+        known_urls = await basecamp_client.known_source_urls()
+    except basecamp_client.KnownUrlsUnavailable as e:
+        logging.error(f"{e} — run stopped, nothing scraped or published")
+        return
+    logging.info(f"Basecamp already has {len(known_urls)} scraped URLs")
+
     # ATS APIs, free structured JSON
     ats_jobs = await fetch_ats(ats_companies)
     logging.info(f"ATS APIs: {len(ats_jobs)} jobs")
 
     # Firecrawl, handles any JS-rendered or custom career page
-    firecrawl_jobs = await fetch_firecrawl(firecrawl_companies)
+    firecrawl_jobs = await fetch_firecrawl(firecrawl_companies, known_urls)
     logging.info(f"Firecrawl: {len(firecrawl_jobs)} jobs")
 
     all_jobs = ats_jobs + firecrawl_jobs
@@ -53,7 +61,8 @@ async def _run():
         logging.info("No jobs fetched — exiting")
         return
 
-    new_jobs = [j for j in all_jobs if j["url"] in filter_new([j["url"] for j in all_jobs])]
+    fresh_urls = set(filter_new(_drop_known([j["url"] for j in all_jobs], known_urls)))
+    new_jobs = [j for j in all_jobs if j["url"] in fresh_urls]
     logging.info(f"{len(new_jobs)} new jobs after dedup")
 
     if not new_jobs:

@@ -8,8 +8,10 @@ and optionally BASECAMP_API_BASE_URL (defaults to the develop environment).
 import os
 import asyncio
 import logging
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Set
 import httpx
+
+from scraper.urls import normalize_job_url
 
 DEFAULT_BASE_URL = "https://basecamp-develop.azurewebsites.net/api"
 
@@ -37,6 +39,36 @@ async def login() -> str:
         )
         resp.raise_for_status()
         return resp.json()["result"]["accessToken"]
+
+
+class KnownUrlsUnavailable(RuntimeError):
+    """Basecamp's scrapped URLs couldn't be read; the run must stop to avoid duplicates."""
+
+
+def _parse_scrapped_urls(values: List[object]) -> Set[str]:
+    """Normalized job URLs; other SourceUrl values (e.g. emails) are ignored."""
+    return {normalize_job_url(v) for v in values if isinstance(v, str) and v.lower().startswith("http")}
+
+
+async def get_scrapped_urls(token: str) -> Set[str]:
+    """SourceUrl of every job Basecamp already has (any status), normalized."""
+    async with httpx.AsyncClient(timeout=60, verify=_verify_ssl()) as client:
+        resp = await client.get(f"{_base_url()}/Job/scrapped-urls", headers={"Authorization": f"Bearer {token}"})
+        resp.raise_for_status()
+        return _parse_scrapped_urls(resp.json().get("result") or [])
+
+
+async def known_source_urls(attempts: int = 3, delay: float = 5) -> Set[str]:
+    """URLs to skip before scraping. Retries (the API may be starting up), then
+    raises KnownUrlsUnavailable: scraping without this list would duplicate jobs."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return await get_scrapped_urls(await login())
+        except Exception as e:
+            logging.warning(f"Reading Basecamp's scrapped URLs failed (attempt {attempt}/{attempts}): {e!r}")
+            if attempt < attempts:
+                await asyncio.sleep(delay * attempt)
+    raise KnownUrlsUnavailable("Basecamp's scrapped URLs couldn't be read")
 
 
 async def extract_skills(description: str) -> List[str]:

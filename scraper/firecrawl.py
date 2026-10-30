@@ -3,12 +3,13 @@ import re
 import json
 import logging
 import asyncio
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 from firecrawl import FirecrawlApp
 from selectolax.lexbor import LexborHTMLParser as HTMLParser
 
 from storage.cache import filter_new
 from scraper.salary import extract_salary
+from scraper.urls import normalize_job_url
 
 # "/apply/" is included because JazzHR (Cotopaxi) uses it as the job's own URL,
 # not just a CTA button — _BARE_APPLY_SUFFIX below still excludes the CTA case.
@@ -192,20 +193,33 @@ def _jobs_per_company_cap() -> int:
     return int(os.environ.get("FIRECRAWL_JOBS_PER_COMPANY", "5"))
 
 
-async def scrape_all(companies: List[Dict]) -> List[Dict]:
+async def scrape_all(companies: List[Dict], known_urls: Optional[Set[str]] = None) -> List[Dict]:
     """One company at a time — 3 concurrent workers each sleeping 7s would
-    combine to ~26 req/min, over the free plan's 10 req/min limit."""
+    combine to ~26 req/min, over the free plan's 10 req/min limit.
+    known_urls: normalized URLs Basecamp already has, skipped before scraping."""
     semaphore = asyncio.Semaphore(1)
 
     async def scrape_one(company: Dict) -> List[Dict]:
         async with semaphore:
-            return await asyncio.to_thread(_scrape_company_sync, company)
+            return await asyncio.to_thread(_scrape_company_sync, company, known_urls or set())
 
     results = await asyncio.gather(*[scrape_one(c) for c in companies])
     return [job for company_jobs in results for job in company_jobs]
 
 
-def _scrape_company_sync(company: Dict) -> List[Dict]:
+def _drop_known(urls: List[str], known: Set[str]) -> List[str]:
+    """URLs not in Basecamp yet, one per job (REI lists some jobs under two URLs)."""
+    seen = set(known)
+    fresh = []
+    for url in urls:
+        key = normalize_job_url(url)
+        if key not in seen:
+            seen.add(key)
+            fresh.append(url)
+    return fresh
+
+
+def _scrape_company_sync(company: Dict, known_urls: Set[str]) -> List[Dict]:
     client = _get_client()
     career_url = company["url"]
     name = company["name"]
@@ -240,7 +254,7 @@ def _scrape_company_sync(company: Dict) -> List[Dict]:
         logging.warning(f"{name}: no job URLs matched after filtering")
         return []
 
-    new_urls = filter_new(job_urls)
+    new_urls = filter_new(_drop_known(job_urls, known_urls))
     already_known = len(job_urls) - len(new_urls)
     logging.info(f"{name}: {len(new_urls)} not yet scraped, {already_known} already known")
 

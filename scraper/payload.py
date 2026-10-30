@@ -20,6 +20,7 @@ import markdown as _markdown
 from scraper.experience import resolve_experience
 from scraper.job_type import resolve_job_type, role_line, text_job_type
 from scraper.location import location_line, parse_locations
+from scraper.urls import normalize_job_url
 
 # Basecamp's public enum JobType, minus Other (6): web has no entry for it and
 # renders "N/A", so scraper/job_type.py never resolves to it.
@@ -162,6 +163,9 @@ def build_payload(job: Dict) -> Dict:
         "howToApply": {
             "urlOrEmail": job.get("url"),
         },
+
+        # Read back by GET /Job/scrapped-urls so the next run skips this posting.
+        "sourceUrl": normalize_job_url(job.get("url")),
     }
 
     if remote_status_id is not None:
