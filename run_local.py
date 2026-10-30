@@ -54,10 +54,11 @@ def load_companies():
 load_settings()
 
 from scraper.ats import fetch_all as fetch_ats
-from scraper.firecrawl import scrape_all as fetch_firecrawl
+from scraper.firecrawl import _drop_known, scrape_all as fetch_firecrawl
 from scraper.enrichment import batch_enrich
 from scraper.payload import build_payload
 from scraper import basecamp_client
+from storage.cache import mark_seen
 
 OUTPUT_FILE = os.path.join(os.path.dirname(__file__), "jobs_output.json")
 DEBUG_DIR = os.path.join(os.path.dirname(__file__), "debug")
@@ -242,8 +243,14 @@ async def run_firecrawl():
     for c in fc_companies:
         print(f"  {c['name']:20s} → {c['url']}")
 
-    print("\nScraping... (this may take a minute)")
-    jobs = await fetch_firecrawl(fc_companies)
+    try:
+        known_urls = await basecamp_client.known_source_urls()
+    except basecamp_client.KnownUrlsUnavailable as e:
+        print(f"\n[stop] {e}. Is the API up and are BASECAMP_USERNAME/PASSWORD set? Nothing scraped.")
+        return []
+    print(f"\nBasecamp already has {len(known_urls)} scraped URLs (skipped)")
+    print("Scraping... (this may take a minute)")
+    jobs = await fetch_firecrawl(fc_companies, known_urls)
     jobs = _cap(jobs, "firecrawl")
 
     print(f"\nTotal: {len(jobs)} jobs")
@@ -280,16 +287,25 @@ async def run_all(skip_ats: bool = False):
     print("\n=== FULL PIPELINE ===")
     print(f"DEBUG_LIMITS: {DEBUG_LIMITS}\n")
 
+    # Same as function_app.py: jobs Basecamp already has are skipped
+    try:
+        known_urls = await basecamp_client.known_source_urls()
+    except basecamp_client.KnownUrlsUnavailable as e:
+        print(f"[stop] {e}. Is the API up and are BASECAMP_USERNAME/PASSWORD set? Nothing scraped.")
+        return
+    print(f"[0/4] Basecamp already has {len(known_urls)} scraped URLs (skipped)")
+
     if skip_ats:
         ats_jobs = []
         print("[1/4] ATS APIs:    skipped (--skip-ats)")
     else:
         ats_jobs = await fetch_ats(ats_companies)
-        ats_jobs = _cap(ats_jobs, "ats")
+        fresh = set(_drop_known([j["url"] for j in ats_jobs], known_urls))
+        ats_jobs = _cap([j for j in ats_jobs if j["url"] in fresh], "ats")
         print(f"[1/4] ATS APIs:    {len(ats_jobs)} jobs")
         save_debug("step_1_ats", ats_jobs)
 
-    fc_jobs = await fetch_firecrawl(fc_companies)
+    fc_jobs = await fetch_firecrawl(fc_companies, known_urls)
     fc_jobs = _cap(fc_jobs, "firecrawl")
     print(f"[2/4] Firecrawl:   {len(fc_jobs)} jobs")
     save_debug("step_2_firecrawl", fc_jobs)
@@ -310,8 +326,11 @@ async def run_all(skip_ats: bool = False):
     save_debug("step_3_enriched", enriched)
     save_debug("step_4_payload", enriched, as_payload=True)
 
-    save_local([j for j in enriched if not j["enrichment_failed"]])
-    print(f"[4/4] Done.")
+    succeeded = [j for j in enriched if not j["enrichment_failed"]]
+    save_local(succeeded)
+    # Same as function_app.py: the next run's Firecrawl step skips these URLs.
+    mark_seen([j["url"] for j in succeeded])
+    print(f"[4/4] Done. {len(succeeded)} URLs marked as seen.")
 
 
 if __name__ == "__main__":
